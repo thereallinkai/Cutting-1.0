@@ -6,7 +6,7 @@ import {
 } from "@/src/lib/env";
 import { createSupabaseAdminClient } from "@/src/lib/supabase/admin";
 
-const EXPECTED_MIGRATION = "20260724000000_initial_cutting_plan_schema";
+const EXPECTED_MIGRATION = "20260728000000_grant_plan_generation_service_role";
 
 export async function GET() {
   let database: "reachable" | "unavailable" | "not_configured" = "not_configured";
