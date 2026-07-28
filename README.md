@@ -1,8 +1,6 @@
 # Cutting Plan
 
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://github.com/OWNER/REPOSITORY/codespaces/new?quickstart=1)
-
-> **Codespaces badge placeholder:** this checkout does not have a GitHub remote, so `OWNER/REPOSITORY` is intentionally not invented. After creating the GitHub repository, replace both placeholders in the badge link with the exact owner and repository name.
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://github.com/thereallinkai/Cutting-1.0/codespaces/new?quickstart=1)
 
 Cutting Plan is a calm, safety-aware meal-planning and habit-tracking application. It combines meal guidance, daily meal check-ins, weight-trend tracking, and a versioned plan workflow without presenting estimates as medical facts or guaranteeing a body-weight outcome.
 
@@ -69,12 +67,10 @@ The recommended Codespaces machine has at least 4 CPU cores, 8 GB memory, and 32
 
 ## Zero-local-install GitHub Codespaces
 
-1. Create or open the repository on GitHub.
-2. Replace `OWNER/REPOSITORY` in the badge above with the exact GitHub path.
-3. Select the badge or use **Code → Codespaces → Create codespace**. A repository branch, feature branch, or pull-request branch can be opened in its own Codespace.
-4. Wait for the Dev Container `postCreateCommand`. It runs `npm run bootstrap`, which installs the exact lockfile and prepares the credential-free local stack.
-5. Run **Terminal → Run Task → Start Cutting Plan**. The same action is available from the Command Palette as **Tasks: Run Task**.
-6. Open the privately forwarded **Cutting Plan** port when VS Code prompts.
+1. Select the badge above or use **Code → Codespaces → Create codespace**. A repository branch, feature branch, or pull-request branch can be opened in its own Codespace.
+2. Wait for the Dev Container `postCreateCommand`. It runs `npm run bootstrap`, which installs the exact lockfile and prepares the credential-free local stack.
+3. Run **Terminal → Run Task → Start Cutting Plan**. The same action is available from the Command Palette as **Tasks: Run Task**.
+4. Open the privately forwarded **Cutting Plan** port when VS Code prompts.
 
 The application, Supabase API, PostgreSQL, Supabase Studio, and captured-email ports are private by default. Bootstrap derives the application origin and exact Supabase Auth callback from Codespaces runtime variables without embedding a GitHub domain literal. Use the Codespaces **Ports** panel to open Studio or captured email instead of copying a forwarded-domain pattern into configuration.
 
@@ -236,6 +232,8 @@ For rollback, prefer rolling the application back while the schema remains backw
 
 ## Testing
 
+Use [MANUAL_TESTING.md](MANUAL_TESTING.md) for the complete human-run feature checklist, expected results, failure-path checks, two-user privacy checks, and optional real-provider validation.
+
 The expected full local gate is:
 
 ```bash
@@ -322,11 +320,10 @@ Never commit API keys, access tokens, database passwords, production credential 
 
 ## Current limitations
 
-- This checkout has no GitHub remote, so the Codespaces badge is a documented placeholder and no branch has been pushed.
 - Hosted Supabase, production SMTP, Vercel, domains, billing, production monitoring, and production secrets are intentionally not configured.
 - Local captured email demonstrates development authentication only.
 - Mock AI is the default. A real OpenAI result is not claimed until the protected opt-in smoke test actually runs.
-- Codespaces and clean Dev Container acceptance still require a repository pushed to GitHub and an environment where Docker is available.
+- Clean Codespaces and Dev Container acceptance still require running the documented checklist in an environment where Docker is available.
 - Real email/OTP authentication, cookie, password-reset, and full onboarding browser acceptance still requires that Docker-backed environment; the current host could not run it.
 - Private nutrition-label foods are stored honestly but are not yet eligible for generated plans until serving-unit conversion and explicit allergen/restriction metadata are supported.
 - Account export is implemented, but account deletion remains visibly unavailable until a reviewed deletion and retention procedure is implemented.
@@ -408,7 +405,7 @@ Back up anything needed, then run `npm run db:reset` and enter the exact confirm
 
 ## Roadmap
 
-1. Complete clean Codespaces and local Dev Container acceptance after the repository is pushed.
+1. Complete clean Codespaces and local Dev Container acceptance from the GitHub repository.
 2. Expand automated authentication, onboarding, RLS, responsive, keyboard, and accessibility coverage.
 3. Review nutrition sources and verification dates for the public catalog.
 4. Exercise the protected real-provider smoke path with explicit credentials and a budget limit.
