@@ -56,6 +56,7 @@ as $$
 $$;
 
 create temporary table rpc_results (
+  goal_id uuid not null,
   plan_id uuid
 ) on commit drop;
 grant all on table rpc_results to authenticated;
@@ -226,6 +227,12 @@ select is(
   'onboarding stores acknowledged composition warnings'
 );
 
+insert into rpc_results (goal_id)
+select id
+from public.goals
+where user_id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+  and status = 'active';
+
 reset role;
 select set_config(
   'request.jwt.claims',
@@ -255,15 +262,10 @@ values (
 
 select lives_ok(
   $$
-    insert into rpc_results (plan_id)
-    select public.save_plan_version(
+    update rpc_results
+    set plan_id = public.save_plan_version(
       'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
-      (
-        select id
-        from public.goals
-        where user_id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
-          and status = 'active'
-      ),
+      (select goal_id from rpc_results),
       'mock',
       'mock-v1',
       'cutting-plan-v1',
@@ -274,6 +276,9 @@ select lives_ok(
   $$,
   'save_plan_version atomically stores a normalized plan'
 );
+
+reset role;
+
 select is(
   (
     select count(*)
@@ -321,15 +326,13 @@ select ok(
   ),
   'saving a plan completes and links its generation request'
 );
+
+set local role service_role;
+
 select is(
   public.save_plan_version(
     'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
-    (
-      select id
-      from public.goals
-      where user_id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
-        and status = 'active'
-    ),
+    (select goal_id from rpc_results),
     'mock',
     'mock-v1',
     'cutting-plan-v1',
@@ -340,6 +343,9 @@ select is(
   (select plan_id from rpc_results),
   'retrying a succeeded generation request returns the same plan'
 );
+
+reset role;
+
 select is(
   (
     select count(*)
@@ -432,12 +438,7 @@ select throws_ok(
   $$
     select public.save_plan_version(
       'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
-      (
-        select id
-        from public.goals
-        where user_id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
-          and status = 'active'
-      ),
+      (select goal_id from rpc_results),
       'mock',
       'mock-v1',
       'cutting-plan-v1',
@@ -453,6 +454,9 @@ select throws_ok(
   'A plan item conflicts with an allergy or dietary restriction.',
   'plan persistence rechecks allergen mappings against the profile'
 );
+
+reset role;
+
 select is(
   (
     select count(*)
@@ -471,6 +475,8 @@ select is(
   'processing',
   'an allergen rejection does not falsely complete the generation request'
 );
+
+set local role service_role;
 
 insert into public.ai_generation_requests (
   id,
@@ -495,12 +501,7 @@ select throws_ok(
   $$
     select public.save_plan_version(
       'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
-      (
-        select id
-        from public.goals
-        where user_id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
-          and status = 'active'
-      ),
+      (select goal_id from rpc_results),
       'mock',
       'mock-v1',
       'cutting-plan-v1',
@@ -513,6 +514,9 @@ select throws_ok(
   'The validated plan payload has an unsupported structure.',
   'an invalid plan payload is rejected'
 );
+
+reset role;
+
 select is(
   (
     select count(*)
