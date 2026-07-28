@@ -201,7 +201,7 @@ select has_function(
 select has_function(
   'public',
   'save_plan_version',
-  array['uuid', 'text', 'text', 'text', 'jsonb', 'jsonb', 'uuid'],
+  array['uuid', 'uuid', 'text', 'text', 'text', 'jsonb', 'jsonb', 'uuid'],
   'the normalized plan-version RPC exists'
 );
 select has_index(

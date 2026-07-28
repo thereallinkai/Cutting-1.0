@@ -385,35 +385,41 @@ select set_config('request.jwt.claim.sub', '', true);
 select set_config('request.jwt.claims', '{}', true);
 set local role anon;
 
-select is(
-  (select count(*) from public.profiles),
-  0::bigint,
-  'an unauthenticated request cannot read profiles'
+select throws_ok(
+  $$ select count(*) from public.profiles $$,
+  '42501',
+  'permission denied for table profiles',
+  'an unauthenticated request is denied read access to profiles'
 );
-select is(
-  (select count(*) from public.foods),
-  0::bigint,
-  'an unauthenticated request cannot read the catalog or private foods'
+select throws_ok(
+  $$ select count(*) from public.foods $$,
+  '42501',
+  'permission denied for table foods',
+  'an unauthenticated request is denied read access to catalog and private foods'
 );
-select is(
-  (select count(*) from public.allergens),
-  0::bigint,
-  'an unauthenticated request cannot read allergen taxonomy'
+select throws_ok(
+  $$ select count(*) from public.allergens $$,
+  '42501',
+  'permission denied for table allergens',
+  'an unauthenticated request is denied read access to allergen taxonomy'
 );
-select is(
-  (select count(*) from public.dietary_restriction_types),
-  0::bigint,
-  'an unauthenticated request cannot read restriction taxonomy'
+select throws_ok(
+  $$ select count(*) from public.dietary_restriction_types $$,
+  '42501',
+  'permission denied for table dietary_restriction_types',
+  'an unauthenticated request is denied read access to restriction taxonomy'
 );
-select is(
-  (select count(*) from public.weight_entries),
-  0::bigint,
-  'an unauthenticated request cannot read weights'
+select throws_ok(
+  $$ select count(*) from public.weight_entries $$,
+  '42501',
+  'permission denied for table weight_entries',
+  'an unauthenticated request is denied read access to weights'
 );
-select is(
-  (select count(*) from public.plans),
-  0::bigint,
-  'an unauthenticated request cannot read plans'
+select throws_ok(
+  $$ select count(*) from public.plans $$,
+  '42501',
+  'permission denied for table plans',
+  'an unauthenticated request is denied read access to plans'
 );
 
 select * from finish();

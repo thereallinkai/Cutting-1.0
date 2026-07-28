@@ -15,4 +15,22 @@ if ! find supabase/tests -type f -name '*.sql' -print -quit 2>/dev/null | grep -
   exit 1
 fi
 
-npx --no-install supabase test db --local
+DB_TEST_OUTPUT="$(mktemp)"
+cleanup() {
+  rm -f -- "$DB_TEST_OUTPUT"
+}
+trap cleanup EXIT
+
+if npx --no-install supabase test db --local 2>&1 | tee "$DB_TEST_OUTPUT"; then
+  exit 0
+fi
+
+if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
+  DETAILS="$(tail -c 60000 "$DB_TEST_OUTPUT")"
+  DETAILS="${DETAILS//'%'/'%25'}"
+  DETAILS="${DETAILS//$'\r'/'%0D'}"
+  DETAILS="${DETAILS//$'\n'/'%0A'}"
+  printf '::error title=Database and RLS test failure::%s\n' "$DETAILS"
+fi
+
+exit 1
