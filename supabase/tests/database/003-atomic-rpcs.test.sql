@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
 
-select plan(23);
+select plan(25);
 
 create or replace function pg_temp.valid_plan_output(
   item_food_id uuid default '10000000-0000-4000-8000-000000000002',
@@ -506,13 +506,49 @@ select throws_ok(
       'mock-v1',
       'cutting-plan-v1',
       '{}'::jsonb,
+      pg_temp.valid_plan_output() #- '{days,0,meals}'::text[],
+      'c4000000-0000-4000-8000-000000000002'
+    )
+  $$,
+  '22023',
+  'Every plan day must contain exactly three meals.',
+  'a plan day without a meals array is rejected'
+);
+
+select throws_ok(
+  $$
+    select public.save_plan_version(
+      'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      (select goal_id from rpc_results),
+      'mock',
+      'mock-v1',
+      'cutting-plan-v1',
+      '{}'::jsonb,
+      pg_temp.valid_plan_output() #- '{days,0,meals,0,items}'::text[],
+      'c4000000-0000-4000-8000-000000000002'
+    )
+  $$,
+  '22023',
+  'Every plan meal must contain at least one item.',
+  'a plan meal without an items array is rejected'
+);
+
+select throws_ok(
+  $$
+    select public.save_plan_version(
+      'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      (select goal_id from rpc_results),
+      'mock',
+      'mock-v1',
+      'cutting-plan-v1',
+      '{}'::jsonb,
       '{}'::jsonb,
       'c4000000-0000-4000-8000-000000000002'
     )
   $$,
   '22023',
   'The validated plan payload has an unsupported structure.',
-  'an invalid plan payload is rejected'
+  'a plan payload without schemaVersion and days is rejected'
 );
 
 reset role;
