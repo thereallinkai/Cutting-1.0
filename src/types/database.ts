@@ -863,7 +863,10 @@ export type Database = {
       food_ownership_type: "catalog" | "private"
       goal_status: "draft" | "active" | "completed" | "cancelled" | "archived"
       goal_type:
-        "fat_loss" | "muscle_gain" | "maintenance" | "body_recomposition"
+        | "fat_loss"
+        | "muscle_gain"
+        | "maintenance"
+        | "body_recomposition"
       legal_document_type: "terms" | "privacy"
       meal_type: "breakfast" | "lunch" | "dinner"
       measurement_basis: "raw" | "dry" | "cooked" | "as_sold" | "label_serving"
@@ -872,9 +875,15 @@ export type Database = {
       plan_status: "generated" | "accepted" | "superseded" | "archived"
       portion_unit: "g" | "ml" | "serving" | "piece"
       profile_gender:
-        "male" | "female" | "another_identity" | "prefer_not_to_say"
+        | "male"
+        | "female"
+        | "another_identity"
+        | "prefer_not_to_say"
       verification_status:
-        "verified" | "user_label" | "pending_verification" | "unavailable"
+        | "verified"
+        | "user_label"
+        | "pending_verification"
+        | "unavailable"
       warning_context_type: "onboarding" | "plan"
       weight_unit: "kg" | "lb"
     }

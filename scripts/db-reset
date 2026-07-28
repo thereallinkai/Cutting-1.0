@@ -46,7 +46,7 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
-npx --no-install supabase gen types typescript --local > "$GENERATED_TYPES"
+npx --no-install supabase gen types typescript --local --schema public > "$GENERATED_TYPES"
 mv "$GENERATED_TYPES" src/types/database.ts
 GENERATED_TYPES=""
 
