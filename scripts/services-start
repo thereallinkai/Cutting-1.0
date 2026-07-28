@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
+source "$ROOT_DIR/scripts/supabase-runtime-env"
+
+CHECK_ONLY=false
+if [[ "${1:-}" == "--check-only" ]]; then
+  CHECK_ONLY=true
+elif [[ $# -gt 0 ]]; then
+  printf 'Unknown option: %s\nUsage: %s [--check-only]\n' "$1" "$0" >&2
+  exit 64
+fi
+
+fail() {
+  printf 'ERROR: %s\n' "$*" >&2
+  exit 1
+}
+
+status_value() {
+  local key="$1"
+  local line
+  line="$(printf '%s\n' "$SUPABASE_STATUS" | awk -F= -v key="$key" '$1 == key { print; exit }')"
+  line="${line#*=}"
+  line="${line#\"}"
+  line="${line%\"}"
+  printf '%s' "$line"
+}
+
+[[ -x node_modules/.bin/supabase ]] \
+  || fail "The project-local Supabase CLI is missing. Run 'npm run bootstrap' first."
+command -v docker >/dev/null 2>&1 \
+  || fail "Docker is not available. Use the Codespace or reopen this repository in its Dev Container."
+command -v curl >/dev/null 2>&1 \
+  || fail "curl is required for bounded health checks. Rebuild the Dev Container."
+
+DOCKER_READY=false
+DOCKER_ATTEMPTS=30
+if [[ "$CHECK_ONLY" == true ]]; then
+  DOCKER_ATTEMPTS=1
+fi
+
+printf 'Checking the Docker daemon...\n'
+for attempt in $(seq 1 "$DOCKER_ATTEMPTS"); do
+  if docker info >/dev/null 2>&1; then
+    DOCKER_READY=true
+    break
+  fi
+
+  if [[ "$attempt" -lt "$DOCKER_ATTEMPTS" ]]; then
+    sleep 2
+  fi
+done
+
+[[ "$DOCKER_READY" == true ]] \
+  || fail "The Docker daemon is not ready. Wait for Docker-in-Docker to start, or start Docker Desktop and retry."
+
+if SUPABASE_STATUS="$(npx --no-install supabase status -o env 2>/dev/null)"; then
+  printf 'Local Supabase is already running; reusing it.\n'
+else
+  if [[ "$CHECK_ONLY" == true ]]; then
+    fail "Local Supabase is not running. Run 'npm run services:start'."
+  fi
+
+  printf 'Starting the local Supabase stack...\n'
+  npx --no-install supabase start
+  SUPABASE_STATUS="$(npx --no-install supabase status -o env)" \
+    || fail "Supabase started incompletely. Review the Docker output above and retry."
+fi
+
+API_URL="$(status_value API_URL)"
+[[ -n "$API_URL" ]] || API_URL="http://127.0.0.1:54321"
+
+printf 'Waiting for Supabase Auth health at %s...\n' "$API_URL"
+for attempt in $(seq 1 60); do
+  if curl --connect-timeout 2 --max-time 4 --silent --show-error --fail \
+    "$API_URL/auth/v1/health" >/dev/null 2>&1; then
+    printf 'Local Supabase is healthy.\n'
+    exit 0
+  fi
+
+  if [[ "$CHECK_ONLY" == true ]]; then
+    break
+  fi
+
+  sleep 2
+done
+
+fail "Supabase did not become healthy within 120 seconds. Run 'docker ps', then 'npm run doctor' for remediation."

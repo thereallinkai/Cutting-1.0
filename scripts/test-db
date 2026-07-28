@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
+source "$ROOT_DIR/scripts/supabase-runtime-env"
+
+if [[ "${CI:-}" != "true" ]] && ! npx --no-install supabase status >/dev/null 2>&1; then
+  printf 'Local Supabase is not running. Start it with npm run services:start.\n' >&2
+  exit 1
+fi
+
+if ! find supabase/tests -type f -name '*.sql' -print -quit 2>/dev/null | grep -q .; then
+  printf 'No database test files were found under supabase/tests.\n' >&2
+  exit 1
+fi
+
+npx --no-install supabase test db --local

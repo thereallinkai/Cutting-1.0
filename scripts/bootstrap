@@ -1,0 +1,217 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
+source "$ROOT_DIR/scripts/supabase-runtime-env"
+
+fail() {
+  printf 'ERROR: %s\n' "$*" >&2
+  exit 1
+}
+
+status_value() {
+  local key="$1"
+  local line
+  line="$(printf '%s\n' "$SUPABASE_STATUS" | awk -F= -v key="$key" '$1 == key { print; exit }')"
+  line="${line#*=}"
+  line="${line#\"}"
+  line="${line%\"}"
+  printf '%s' "$line"
+}
+
+append_local_value() {
+  local key="$1"
+  local value="$2"
+
+  if grep -Eq "^[[:space:]]*${key}=" .env.local 2>/dev/null; then
+    printf 'Preserving existing %s in .env.local.\n' "$key"
+    return
+  fi
+
+  printf '%s=%s\n' "$key" "$value" >> .env.local
+}
+
+stop_temporary_app() {
+  if [[ -n "${TEMP_APP_PID:-}" ]]; then
+    kill "$TEMP_APP_PID" >/dev/null 2>&1 || true
+    wait "$TEMP_APP_PID" 2>/dev/null || true
+  fi
+}
+
+cleanup() {
+  if [[ -n "${GENERATED_TYPES:-}" ]]; then
+    rm -f -- "$GENERATED_TYPES"
+  fi
+  stop_temporary_app
+}
+
+[[ "$(uname -s)" == "Linux" ]] \
+  || fail "Bootstrap is designed for the Linux Codespace or Dev Container. On a desktop, choose 'Dev Containers: Reopen in Container' first."
+
+if [[ ! -f /.dockerenv && -z "${CODESPACES:-}" && -z "${REMOTE_CONTAINERS:-}" && -z "${CI:-}" ]]; then
+  fail "No supported container environment was detected. Use GitHub Codespaces or reopen the repository in its Dev Container."
+fi
+
+command -v node >/dev/null 2>&1 \
+  || fail "Node.js is unavailable. Rebuild the Dev Container to install Node.js 22."
+command -v npm >/dev/null 2>&1 \
+  || fail "npm is unavailable. Rebuild the Dev Container."
+command -v docker >/dev/null 2>&1 \
+  || fail "Docker is unavailable. Rebuild the Dev Container with Docker-in-Docker enabled."
+command -v psql >/dev/null 2>&1 \
+  || fail "psql is unavailable. Rebuild the Dev Container to install the PostgreSQL client."
+command -v curl >/dev/null 2>&1 \
+  || fail "curl is unavailable. Rebuild the Dev Container."
+
+printf 'Waiting for the Docker-in-Docker daemon...\n'
+DOCKER_READY=false
+for attempt in $(seq 1 60); do
+  if docker info >/dev/null 2>&1; then
+    DOCKER_READY=true
+    break
+  fi
+
+  sleep 2
+done
+[[ "$DOCKER_READY" == true ]] \
+  || fail "The Docker daemon did not become ready within 120 seconds. Rebuild the Dev Container or inspect Docker Desktop."
+
+EXPECTED_NODE="$(tr -d '[:space:]' < .nvmrc)"
+ACTUAL_NODE="$(node -p 'process.versions.node')"
+[[ "$ACTUAL_NODE" == "$EXPECTED_NODE" ]] \
+  || fail "Node.js ${EXPECTED_NODE} is required; found ${ACTUAL_NODE}. Rebuild the Dev Container."
+
+EXPECTED_NPM="$(node -p "require('./package.json').packageManager.replace(/^npm@/, '')")"
+ACTUAL_NPM="$(npm --version)"
+[[ "$ACTUAL_NPM" == "$EXPECTED_NPM" ]] \
+  || fail "npm ${EXPECTED_NPM} is required; found ${ACTUAL_NPM}. Rebuild the Dev Container."
+
+printf 'Installing exact dependencies from package-lock.json...\n'
+npm ci
+
+if [[ ! -f supabase/.env ]]; then
+  {
+    printf '# Generated local Supabase values. Existing entries are preserved.\n'
+    printf '# This file is ignored by Git.\n'
+  } > supabase/.env
+fi
+chmod 600 supabase/.env
+if grep -Eq '^[[:space:]]*CUTTING_PLAN_AUTH_REDIRECT_URL=' supabase/.env; then
+  printf 'Preserving the existing managed Auth redirect in supabase/.env; the current runtime value takes precedence.\n'
+else
+  printf 'CUTTING_PLAN_AUTH_REDIRECT_URL=%s\n' \
+    "$CUTTING_PLAN_AUTH_REDIRECT_URL" >> supabase/.env
+fi
+
+./scripts/services-start
+SUPABASE_STATUS="$(npx --no-install supabase status -o env)"
+DATABASE_URL_VALUE="$(status_value DB_URL)"
+API_URL_VALUE="$(status_value API_URL)"
+ANON_KEY_VALUE="$(status_value ANON_KEY)"
+SERVICE_ROLE_KEY_VALUE="$(status_value SERVICE_ROLE_KEY)"
+STUDIO_URL_VALUE="$(status_value STUDIO_URL)"
+EMAIL_CAPTURE_URL_VALUE="$(status_value MAILPIT_URL)"
+[[ -n "$EMAIL_CAPTURE_URL_VALUE" ]] \
+  || EMAIL_CAPTURE_URL_VALUE="$(status_value INBUCKET_URL)"
+APP_URL_VALUE="http://localhost:3000"
+
+if [[ -n "${CODESPACE_NAME:-}" && -n "${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN:-}" ]]; then
+  APP_URL_VALUE="https://${CODESPACE_NAME}-3000.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}"
+fi
+
+# Newer Supabase CLI releases may expose publishable/secret key names in
+# addition to the legacy local aliases.
+[[ -n "$ANON_KEY_VALUE" ]] || ANON_KEY_VALUE="$(status_value PUBLISHABLE_KEY)"
+[[ -n "$SERVICE_ROLE_KEY_VALUE" ]] || SERVICE_ROLE_KEY_VALUE="$(status_value SECRET_KEY)"
+
+[[ -n "$DATABASE_URL_VALUE" ]] || fail "Supabase did not report a local DB_URL."
+[[ -n "$API_URL_VALUE" ]] || fail "Supabase did not report a local API_URL."
+[[ -n "$ANON_KEY_VALUE" ]] || fail "Supabase did not report a local browser key."
+[[ -n "$SERVICE_ROLE_KEY_VALUE" ]] || fail "Supabase did not report a local server key."
+[[ -f supabase/seed.sql ]] \
+  || fail "supabase/seed.sql is missing. Restore the version-controlled deterministic seed before bootstrapping."
+
+printf 'Applying pending version-controlled migrations without resetting data...\n'
+npx --no-install supabase migration up --local
+
+printf 'Applying the deterministic idempotent development seed...\n'
+psql "$DATABASE_URL_VALUE" --set ON_ERROR_STOP=1 --file supabase/seed.sql >/dev/null
+
+if [[ ! -f .env.local ]]; then
+  {
+    printf '# Generated by scripts/bootstrap for local development only.\n'
+    printf '# Existing values are never replaced when bootstrap is rerun.\n'
+  } > .env.local
+fi
+
+chmod 600 .env.local
+append_local_value NEXT_PUBLIC_APP_URL "$APP_URL_VALUE"
+append_local_value NEXT_PUBLIC_SUPABASE_URL "$API_URL_VALUE"
+append_local_value NEXT_PUBLIC_SUPABASE_ANON_KEY "$ANON_KEY_VALUE"
+append_local_value SUPABASE_SERVICE_ROLE_KEY "$SERVICE_ROLE_KEY_VALUE"
+append_local_value DATABASE_URL "$DATABASE_URL_VALUE"
+append_local_value SUPABASE_STUDIO_URL "${STUDIO_URL_VALUE:-http://127.0.0.1:54323}"
+append_local_value SUPABASE_EMAIL_CAPTURE_URL "${EMAIL_CAPTURE_URL_VALUE:-http://127.0.0.1:54324}"
+append_local_value PLAYWRIGHT_BASE_URL "http://127.0.0.1:3000"
+append_local_value AI_PROVIDER "mock"
+append_local_value ENABLE_REAL_AI "false"
+append_local_value OPENAI_MODEL "gpt-5.6-luna"
+append_local_value OPENAI_REQUEST_TIMEOUT_MS "30000"
+
+printf 'Generating TypeScript definitions from the local database...\n'
+mkdir -p src/types
+GENERATED_TYPES="$(mktemp)"
+trap cleanup EXIT
+npx --no-install supabase gen types typescript --local > "$GENERATED_TYPES"
+mv "$GENERATED_TYPES" src/types/database.ts
+GENERATED_TYPES=""
+
+[[ -x node_modules/.bin/playwright ]] \
+  || fail "The project-local Playwright CLI is missing. Add @playwright/test to devDependencies and rerun bootstrap."
+printf 'Installing the lockfile-compatible Playwright Chromium browser and system dependencies...\n'
+npx --no-install playwright install --with-deps chromium
+
+printf 'Checking local database reachability...\n'
+[[ "$(psql "$DATABASE_URL_VALUE" --tuples-only --no-align --command 'select 1' | tr -d '[:space:]')" == "1" ]] \
+  || fail "The database did not answer a basic query."
+
+APP_HEALTH_URL="http://127.0.0.1:3000/api/health"
+if curl --connect-timeout 2 --max-time 4 --silent --show-error --fail "$APP_HEALTH_URL" >/dev/null 2>&1; then
+  printf 'Reusing the running application for its health check.\n'
+else
+  if command -v nc >/dev/null 2>&1 && nc -z 127.0.0.1 3000 >/dev/null 2>&1; then
+    fail "Port 3000 is occupied by a process that does not provide the Cutting Plan health endpoint."
+  fi
+
+  printf 'Starting a temporary Next.js process for the application health check...\n'
+  ./node_modules/.bin/next dev --hostname 127.0.0.1 --port 3000 \
+    > /tmp/cutting-plan-bootstrap-next.log 2>&1 &
+  TEMP_APP_PID=$!
+
+  for attempt in $(seq 1 60); do
+    if curl --connect-timeout 2 --max-time 4 --silent --show-error --fail \
+      "$APP_HEALTH_URL" >/dev/null 2>&1; then
+      printf 'Application health check passed.\n'
+      break
+    fi
+
+    if ! kill -0 "$TEMP_APP_PID" >/dev/null 2>&1; then
+      sed -n '1,200p' /tmp/cutting-plan-bootstrap-next.log >&2
+      fail "The temporary Next.js process exited before becoming healthy."
+    fi
+
+    if [[ "$attempt" -eq 60 ]]; then
+      sed -n '1,200p' /tmp/cutting-plan-bootstrap-next.log >&2
+      fail "The application did not become healthy within 120 seconds."
+    fi
+
+    sleep 2
+  done
+fi
+
+printf '\nBootstrap complete.\n'
+printf 'Application:          %s\n' "$APP_URL_VALUE"
+printf 'Supabase Studio:      %s\n' "${STUDIO_URL_VALUE:-http://127.0.0.1:54323}"
+printf 'Local captured email: %s\n' "${EMAIL_CAPTURE_URL_VALUE:-http://127.0.0.1:54324}"
+printf '\nRun the VS Code task \"Start Cutting Plan\" or execute npm run dev:all.\n'

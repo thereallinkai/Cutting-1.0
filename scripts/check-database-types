@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
+source "$ROOT_DIR/scripts/supabase-runtime-env"
+
+COMMITTED_TYPES="src/types/database.ts"
+[[ -f "$COMMITTED_TYPES" ]] || {
+  printf 'ERROR: %s is missing. Run npm run bootstrap to generate it.\n' "$COMMITTED_TYPES" >&2
+  exit 1
+}
+
+[[ -x node_modules/.bin/supabase ]] && command -v npx >/dev/null 2>&1 || {
+  printf 'ERROR: The project-local Supabase CLI is missing. Run npm ci first.\n' >&2
+  exit 1
+}
+
+if ! npx --no-install supabase status >/dev/null 2>&1; then
+  printf 'ERROR: Local Supabase is not running. Start it with npm run services:start before checking generated types.\n' >&2
+  exit 1
+fi
+
+GENERATED_TYPES="$(mktemp)"
+cleanup() {
+  if [[ -n "${GENERATED_TYPES:-}" ]]; then
+    rm -f -- "$GENERATED_TYPES"
+  fi
+}
+trap cleanup EXIT
+npx --no-install supabase gen types typescript --local > "$GENERATED_TYPES"
+
+if ! cmp --silent "$COMMITTED_TYPES" "$GENERATED_TYPES"; then
+  printf 'ERROR: Generated database types do not match the running local migrations.\n' >&2
+  printf 'Run npm run bootstrap, review src/types/database.ts, and commit the result.\n' >&2
+  diff --unified "$COMMITTED_TYPES" "$GENERATED_TYPES" || true
+  exit 1
+fi
+
+printf 'Generated database types match the local migration state.\n'

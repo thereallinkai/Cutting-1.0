@@ -1,0 +1,94 @@
+{
+  "name": "Cutting Plan",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "remoteUser": "node",
+  "features": {
+    "ghcr.io/devcontainers/features/node:2.1.0": {
+      "version": "22.23.1",
+      "nodeGypDependencies": true,
+      "npmVersion": "10.9.8"
+    },
+    "ghcr.io/devcontainers/features/docker-in-docker:3.0.1": {
+      "version": "latest",
+      "moby": true,
+      "dockerDashComposeVersion": "v2"
+    },
+    "ghcr.io/devcontainers/features/github-cli:1.1.0": {}
+  },
+  "containerEnv": {
+    "PLAYWRIGHT_BROWSERS_PATH": "/home/node/.cache/ms-playwright"
+  },
+  "forwardPorts": [
+    3000,
+    54321,
+    54322,
+    54323,
+    54324
+  ],
+  "portsAttributes": {
+    "3000": {
+      "label": "Cutting Plan",
+      "onAutoForward": "openPreview",
+      "visibility": "private"
+    },
+    "54321": {
+      "label": "Supabase API",
+      "onAutoForward": "silent",
+      "visibility": "private"
+    },
+    "54322": {
+      "label": "Local PostgreSQL",
+      "onAutoForward": "silent",
+      "visibility": "private"
+    },
+    "54323": {
+      "label": "Supabase Studio",
+      "onAutoForward": "notify",
+      "visibility": "private"
+    },
+    "54324": {
+      "label": "Local captured email",
+      "onAutoForward": "notify",
+      "visibility": "private"
+    }
+  },
+  "otherPortsAttributes": {
+    "onAutoForward": "silent",
+    "visibility": "private"
+  },
+  "hostRequirements": {
+    "cpus": 4,
+    "memory": "8gb",
+    "storage": "32gb"
+  },
+  "postCreateCommand": "npm run bootstrap",
+  "postStartCommand": "./scripts/services-start --check-only || true",
+  "waitFor": "postCreateCommand",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "bradlc.vscode-tailwindcss",
+        "ms-playwright.playwright",
+        "ms-azuretools.vscode-containers",
+        "GitHub.vscode-pull-request-github",
+        "esbenp.prettier-vscode",
+        "EditorConfig.EditorConfig"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "typescript.tsdk": "node_modules/typescript/lib",
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    },
+    "codespaces": {
+      "openFiles": [
+        "README.md"
+      ]
+    }
+  }
+}

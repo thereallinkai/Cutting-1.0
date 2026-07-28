@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
+source "$ROOT_DIR/scripts/supabase-runtime-env"
+
+CONFIRMATION_PHRASE="RESET LOCAL DATABASE"
+
+if [[ "${ALLOW_LOCAL_DB_RESET:-0}" != "1" ]]; then
+  if [[ ! -t 0 ]]; then
+    printf 'ERROR: Refusing to reset local data without an interactive confirmation.\n' >&2
+    printf 'For a disposable CI database only, set ALLOW_LOCAL_DB_RESET=1.\n' >&2
+    exit 1
+  fi
+
+  printf 'This deletes every user-created record in the local Supabase database.\n'
+  printf 'It does not affect a hosted or production database.\n'
+  read -r -p "Type '${CONFIRMATION_PHRASE}' to continue: " response
+  if [[ "$response" != "$CONFIRMATION_PHRASE" ]]; then
+    printf 'Reset cancelled; local data was preserved.\n'
+    exit 1
+  fi
+fi
+
+./scripts/services-start
+
+SUPABASE_STATUS="$(npx --no-install supabase status -o env)"
+LOCAL_DB_URL="$(
+  printf '%s\n' "$SUPABASE_STATUS" \
+    | awk -F= '$1 == "DB_URL" { sub(/^[^=]*=/, ""); gsub(/^"|"$/, ""); print; exit }'
+)"
+if [[ "$LOCAL_DB_URL" != *"@127.0.0.1:"* && "$LOCAL_DB_URL" != *"@localhost:"* ]]; then
+  printf 'ERROR: The resolved database target is not a loopback address; reset was refused.\n' >&2
+  exit 1
+fi
+
+printf 'Resetting only the local Supabase database from migrations and seed data...\n'
+npx --no-install supabase db reset --local
+
+mkdir -p src/types
+GENERATED_TYPES="$(mktemp)"
+cleanup() {
+  if [[ -n "${GENERATED_TYPES:-}" ]]; then
+    rm -f -- "$GENERATED_TYPES"
+  fi
+}
+trap cleanup EXIT
+npx --no-install supabase gen types typescript --local > "$GENERATED_TYPES"
+mv "$GENERATED_TYPES" src/types/database.ts
+GENERATED_TYPES=""
+
+printf 'Local database reset complete. User-created local data cannot be recovered by this command.\n'

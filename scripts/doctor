@@ -1,0 +1,208 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
+source "$ROOT_DIR/scripts/supabase-runtime-env"
+
+PASS_COUNT=0
+FAIL_COUNT=0
+WARN_COUNT=0
+SUPABASE_STATUS=""
+DATABASE_URL_VALUE=""
+
+pass() {
+  PASS_COUNT=$((PASS_COUNT + 1))
+  printf 'PASS  %s\n' "$*"
+}
+
+fail() {
+  FAIL_COUNT=$((FAIL_COUNT + 1))
+  printf 'FAIL  %s\n' "$*"
+}
+
+warn() {
+  WARN_COUNT=$((WARN_COUNT + 1))
+  printf 'WARN  %s\n' "$*"
+}
+
+status_value() {
+  local key="$1"
+  local line
+  line="$(printf '%s\n' "$SUPABASE_STATUS" | awk -F= -v key="$key" '$1 == key { print; exit }')"
+  line="${line#*=}"
+  line="${line#\"}"
+  line="${line%\"}"
+  printf '%s' "$line"
+}
+
+check_listening_port() {
+  local port="$1"
+  local label="$2"
+
+  if { command -v nc >/dev/null 2>&1 && nc -z 127.0.0.1 "$port" >/dev/null 2>&1; } \
+    || (exec 3<>"/dev/tcp/127.0.0.1/${port}") 2>/dev/null; then
+    pass "${label} is listening on port ${port}."
+  else
+    fail "${label} is not listening on port ${port}. Run 'npm run services:start' or inspect the process using that port."
+  fi
+}
+
+printf 'Cutting Plan environment doctor\n\n'
+
+EXPECTED_NODE="$(tr -d '[:space:]' < .nvmrc 2>/dev/null || true)"
+if command -v node >/dev/null 2>&1; then
+  ACTUAL_NODE="$(node -p 'process.versions.node')"
+  if [[ "$ACTUAL_NODE" == "$EXPECTED_NODE" ]]; then
+    pass "Node.js ${ACTUAL_NODE} matches .nvmrc."
+  else
+    fail "Node.js ${EXPECTED_NODE} is required; found ${ACTUAL_NODE}. Rebuild the Dev Container."
+  fi
+else
+  fail "Node.js is missing. Use the Codespace or reopen the repository in its Dev Container."
+fi
+
+if command -v npm >/dev/null 2>&1; then
+  ACTUAL_NPM="$(npm --version)"
+  EXPECTED_NPM=""
+  if command -v node >/dev/null 2>&1; then
+    EXPECTED_NPM="$(node -p "require('./package.json').packageManager?.replace(/^npm@/, '') ?? ''" 2>/dev/null || true)"
+  fi
+
+  if [[ -z "$EXPECTED_NPM" ]]; then
+    fail "package.json must record an exact packageManager such as npm@10.9.8."
+  elif [[ "$ACTUAL_NPM" == "$EXPECTED_NPM" ]]; then
+    pass "npm ${ACTUAL_NPM} matches package.json."
+  else
+    fail "npm ${EXPECTED_NPM} is required; found ${ACTUAL_NPM}. Rebuild the Dev Container."
+  fi
+else
+  fail "npm is missing. Rebuild the Dev Container."
+fi
+
+if command -v docker >/dev/null 2>&1; then
+  if docker info >/dev/null 2>&1; then
+    pass "Docker CLI and daemon are available."
+  else
+    fail "Docker CLI exists but its daemon is unavailable. Wait for Docker-in-Docker or start Docker Desktop."
+  fi
+else
+  fail "Docker is missing. Use the repository Dev Container, which supplies Docker-in-Docker."
+fi
+
+if [[ -x node_modules/.bin/supabase ]] && command -v npx >/dev/null 2>&1; then
+  SUPABASE_VERSION="$(npx --no-install supabase --version 2>/dev/null || true)"
+  pass "Project-local Supabase CLI is installed${SUPABASE_VERSION:+ (${SUPABASE_VERSION})}."
+else
+  fail "The project-local Supabase CLI or its Node.js launcher is missing. Run 'npm run bootstrap' in the Dev Container."
+fi
+
+if [[ -x node_modules/.bin/supabase ]] \
+  && command -v npx >/dev/null 2>&1 \
+  && command -v docker >/dev/null 2>&1 \
+  && docker info >/dev/null 2>&1 \
+  && SUPABASE_STATUS="$(npx --no-install supabase status -o env 2>/dev/null)"; then
+  pass "Local Supabase reports a running stack."
+  DATABASE_URL_VALUE="$(status_value DB_URL)"
+else
+  fail "Local Supabase is not running. Run 'npm run services:start'."
+fi
+
+if [[ -n "$DATABASE_URL_VALUE" ]] && command -v psql >/dev/null 2>&1; then
+  if [[ "$(psql "$DATABASE_URL_VALUE" --tuples-only --no-align --command 'select 1' 2>/dev/null | tr -d '[:space:]')" == "1" ]]; then
+    pass "Local PostgreSQL accepts queries."
+  else
+    fail "Local PostgreSQL did not answer a query. Inspect 'docker ps' and rerun services:start."
+  fi
+elif ! command -v psql >/dev/null 2>&1; then
+  fail "psql is missing. Rebuild the Dev Container."
+else
+  fail "Database connectivity could not be checked because Supabase did not report DB_URL."
+fi
+
+if [[ -n "$DATABASE_URL_VALUE" && -d supabase/migrations ]]; then
+  LOCAL_MIGRATIONS="$(
+    for migration in supabase/migrations/*.sql; do
+      [[ -e "$migration" ]] || continue
+      basename "$migration" | sed 's/_.*//'
+    done | sort
+  )"
+  DATABASE_MIGRATIONS="$(
+    psql "$DATABASE_URL_VALUE" --tuples-only --no-align \
+      --command 'select version from supabase_migrations.schema_migrations order by version' \
+      2>/dev/null || true
+  )"
+
+  if [[ -z "$LOCAL_MIGRATIONS" ]]; then
+    fail "No version-controlled SQL migrations were found in supabase/migrations."
+  elif [[ "$LOCAL_MIGRATIONS" == "$DATABASE_MIGRATIONS" ]]; then
+    pass "The local database migration state matches the migration files."
+  else
+    fail "Migration state differs from supabase/migrations. Run 'npx supabase migration up --local'; do not reset user data."
+  fi
+else
+  fail "Migration compatibility could not be checked until local Supabase is healthy."
+fi
+
+if [[ -f .env.local ]]; then
+  MISSING_LOCAL_KEYS=()
+  for required_key in \
+    NEXT_PUBLIC_APP_URL \
+    NEXT_PUBLIC_SUPABASE_URL \
+    NEXT_PUBLIC_SUPABASE_ANON_KEY \
+    SUPABASE_SERVICE_ROLE_KEY \
+    DATABASE_URL \
+    AI_PROVIDER \
+    ENABLE_REAL_AI; do
+    if ! grep -Eq "^[[:space:]]*${required_key}=.+" .env.local; then
+      MISSING_LOCAL_KEYS+=("$required_key")
+    fi
+  done
+
+  if [[ ${#MISSING_LOCAL_KEYS[@]} -eq 0 ]]; then
+    pass "Ignored local configuration is present with all required variable names."
+  else
+    fail "Local configuration is missing: ${MISSING_LOCAL_KEYS[*]}. Rerun 'npm run bootstrap'; existing values will be preserved."
+  fi
+else
+  fail ".env.local is missing. Run 'npm run bootstrap'; do not copy production secrets into it."
+fi
+
+check_listening_port 54321 "Supabase API"
+check_listening_port 54322 "Local PostgreSQL"
+check_listening_port 54323 "Supabase Studio"
+check_listening_port 54324 "Local captured email"
+
+APP_HEALTH_URL="http://127.0.0.1:3000/api/health"
+if ! command -v curl >/dev/null 2>&1; then
+  fail "curl is missing, so application readiness cannot be checked. Rebuild the Dev Container."
+elif APP_HEALTH_RESPONSE="$(curl --connect-timeout 2 --max-time 5 --silent --show-error --fail "$APP_HEALTH_URL" 2>/dev/null)"; then
+  if [[ "$APP_HEALTH_RESPONSE" == *'"status"'* || "$APP_HEALTH_RESPONSE" == *'"data"'* ]]; then
+    pass "Next.js is ready and /api/health returned a structured response."
+  else
+    warn "Next.js answered /api/health, but the response shape was not recognized."
+  fi
+else
+  fail "Next.js is not ready on port 3000. Run the VS Code task 'Start Cutting Plan' or 'npm run dev:all'."
+fi
+
+if [[ -x node_modules/.bin/playwright ]] && command -v node >/dev/null 2>&1; then
+  if node --input-type=module -e \
+    "import fs from 'node:fs'; const module = await import('@playwright/test'); fs.accessSync(module.chromium.executablePath());" \
+    >/dev/null 2>&1; then
+    pass "Playwright and its matching Chromium browser are available."
+  else
+    fail "Playwright is installed but Chromium is unavailable. Run 'npx playwright install --with-deps chromium'."
+  fi
+elif ! command -v node >/dev/null 2>&1; then
+  fail "Playwright cannot be checked because Node.js is unavailable. Use the Dev Container."
+else
+  fail "Project-local Playwright is missing. Run 'npm run bootstrap'."
+fi
+
+printf '\nDoctor summary: %d passed, %d warning(s), %d failed.\n' \
+  "$PASS_COUNT" "$WARN_COUNT" "$FAIL_COUNT"
+
+if [[ "$FAIL_COUNT" -gt 0 ]]; then
+  exit 1
+fi
