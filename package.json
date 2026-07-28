@@ -26,7 +26,7 @@
     "verify:app": "npm run typecheck && npm run lint && npm run test && npm run build && npm run test:e2e",
     "verify": "npm run typecheck && npm run lint && npm run test && npm run test:db && npm run db:types:check && npm run build && npm run test:e2e",
     "db:reset": "./scripts/db-reset",
-    "db:types": "supabase gen types typescript --local --schema public > src/types/database.ts",
+    "db:types": "./scripts/generate-database-types > src/types/database.ts",
     "db:types:check": "./scripts/check-database-types",
     "down": "./scripts/down",
     "openai:smoke": "NODE_OPTIONS=--conditions=react-server tsx scripts/openai-smoke.ts"

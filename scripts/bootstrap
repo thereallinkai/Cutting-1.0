@@ -163,7 +163,7 @@ printf 'Generating TypeScript definitions from the local database...\n'
 mkdir -p src/types
 GENERATED_TYPES="$(mktemp)"
 trap cleanup EXIT
-npx --no-install supabase gen types typescript --local --schema public > "$GENERATED_TYPES"
+"$ROOT_DIR/scripts/generate-database-types" > "$GENERATED_TYPES"
 mv "$GENERATED_TYPES" src/types/database.ts
 GENERATED_TYPES=""
 

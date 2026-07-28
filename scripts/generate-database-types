@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
+
+[[ -x node_modules/.bin/supabase ]] && command -v npx >/dev/null 2>&1 || {
+  printf 'ERROR: The project-local Supabase CLI is missing. Run npm ci first.\n' >&2
+  exit 1
+}
+
+# postgres-meta emits a redundant trailing blank line in some pinned releases.
+# Keep internal blank lines while producing one stable final newline.
+npx --no-install supabase gen types typescript --local --schema public |
+  awk '
+    NF {
+      while (pending_blank_lines > 0) {
+        print ""
+        pending_blank_lines--
+      }
+      print
+      next
+    }
+    {
+      pending_blank_lines++
+    }
+  '

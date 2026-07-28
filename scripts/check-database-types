@@ -41,7 +41,7 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
-npx --no-install supabase gen types typescript --local --schema public > "$GENERATED_TYPES"
+"$ROOT_DIR/scripts/generate-database-types" > "$GENERATED_TYPES"
 
 if ! cmp --silent "$COMMITTED_TYPES" "$GENERATED_TYPES"; then
   printf 'ERROR: Generated database types do not match the running local migrations.\n' >&2
