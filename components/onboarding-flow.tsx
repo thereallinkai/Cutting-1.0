@@ -34,6 +34,10 @@ import {
   X,
 } from "lucide-react";
 import { DEMO_CATALOG } from "@/src/lib/demo-catalog";
+import {
+  normalizeMealFoodSlugs,
+  parseOptionalHeight,
+} from "@/src/lib/onboarding-input";
 
 type Meal = "breakfast" | "lunch" | "dinner";
 type Unit = "kg" | "lb";
@@ -97,6 +101,69 @@ const initialDraft: Draft = {
   notes: "",
   acknowledgedWarnings: [],
 };
+
+type ApiFailure = {
+  error?: {
+    code?: string;
+    message?: string;
+  } | null;
+};
+
+function normalizeRestoredDraft(value: unknown): Partial<Draft> {
+  if (!value || typeof value !== "object") return {};
+  const restored = value as Partial<Draft>;
+  if (!restored.meals || typeof restored.meals !== "object") return restored;
+  const meals = restored.meals as unknown as Record<string, unknown>;
+  const normalizedMeals = (["breakfast", "lunch", "dinner"] as const).reduce(
+    (result, meal) => {
+      const slugs = Array.isArray(meals[meal])
+        ? meals[meal].filter((slug): slug is string => typeof slug === "string")
+        : [];
+      result[meal] = normalizeMealFoodSlugs(slugs);
+      return result;
+    },
+    {} as Draft["meals"],
+  );
+  return { ...restored, meals: normalizedMeals };
+}
+
+function completionFailure(
+  result: ApiFailure | null,
+): { field: string; heading: string; message: string } {
+  const code = result?.error?.code;
+  const serverMessage = result?.error?.message;
+  if (code === "SESSION_EXPIRED") {
+    return {
+      field: "session",
+      heading: "Your session expired.",
+      message:
+        "Log in again to finish onboarding. Your information is still saved in this browser.",
+    };
+  }
+  if (code === "FOOD_SELECTION_CHANGED" || code === "DUPLICATE_MEAL_FOOD") {
+    return {
+      field: "mealPreferences",
+      heading: "Review your meal selections.",
+      message: `${serverMessage ?? "One or more meal selections need attention."} Choose Edit under Meals, review the foods, and try again.`,
+    };
+  }
+  if (code === "INVALID_HEIGHT") {
+    return {
+      field: "height",
+      heading: "Review your height.",
+      message:
+        serverMessage
+        ?? "Enter a height such as 175 cm or 5 ft 9 in, or leave it blank.",
+    };
+  }
+  return {
+    field: "profile",
+    heading: "We could not complete onboarding.",
+    message:
+      serverMessage
+      ?? "We could not save the final step. Your information is still here; please try again.",
+  };
+}
 
 const stepLabels = [
   "Account and profile",
@@ -261,6 +328,33 @@ export function OnboardingFlow({
   const draftSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const generationKeyRef = useRef<string | null>(null);
 
+  const loadCatalogFoods = useCallback(async () => {
+    try {
+      const response = await fetch("/api/foods");
+      if (!response.ok) return false;
+      const result = (await response.json()) as {
+        data?: Array<{
+          slug: string;
+          english_name: string;
+          categories?: string[];
+          plan_eligible: boolean;
+        }>;
+      };
+      if (!result.data?.length) return false;
+      setCatalogFoods(
+        result.data.map((food) => ({
+          id: food.slug,
+          name: food.english_name,
+          categories: food.categories ?? [],
+          planEligible: food.plan_eligible,
+        })),
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
   const queueDraftPersistence = useCallback(
     (currentStep: number, draftSnapshot: Draft) => {
       const save = draftSaveQueueRef.current
@@ -295,7 +389,7 @@ export function OnboardingFlow({
     const saved = window.localStorage.getItem("cutting-plan-onboarding-draft");
     if (saved) {
       try {
-        const restored = JSON.parse(saved) as Partial<Draft>;
+        const restored = normalizeRestoredDraft(JSON.parse(saved));
         window.setTimeout(() => {
           setDraft((current) => ({ ...current, ...restored }));
         }, 0);
@@ -307,40 +401,20 @@ export function OnboardingFlow({
       .then((response) => (response.ok ? response.json() : null))
       .then((result: { data?: { currentStep?: number; draft?: Partial<Draft> } } | null) => {
         if (result?.data?.draft) {
-          setDraft((current) => ({ ...current, ...result.data!.draft }));
+          const restored = normalizeRestoredDraft(result.data.draft);
+          setDraft((current) => ({ ...current, ...restored }));
         }
         if (result?.data?.currentStep && result.data.currentStep >= 3) {
           goToStep(result.data.currentStep);
         }
       })
       .catch(() => undefined);
-    fetch("/api/foods")
-      .then((response) => (response.ok ? response.json() : null))
-      .then(
-        (
-          result: {
-            data?: Array<{
-              slug: string;
-              english_name: string;
-              categories?: string[];
-              plan_eligible: boolean;
-            }>;
-          } | null,
-        ) => {
-          if (result?.data?.length) {
-            setCatalogFoods(
-              result.data.map((food) => ({
-                id: food.slug,
-                name: food.english_name,
-                categories: food.categories ?? [],
-                planEligible: food.plan_eligible,
-              })),
-            );
-          }
-        },
-      )
-      .catch(() => undefined);
-  }, []);
+    if (initialStep >= 3) {
+      window.setTimeout(() => {
+        void loadCatalogFoods();
+      }, 0);
+    }
+  }, [initialStep, loadCatalogFoods]);
 
   useEffect(() => {
     window.localStorage.setItem("cutting-plan-onboarding-draft", JSON.stringify(draft));
@@ -452,6 +526,13 @@ export function OnboardingFlow({
   function validateLifestyleStep(): PageError[] {
     const errors: PageError[] = [];
     const trainingDays = Number(draft.trainingDays);
+    if (!parseOptionalHeight(draft.height).ok) {
+      errors.push({
+        field: "height",
+        message:
+          "Enter a height from 50 to 300 cm, such as 175 cm or 5 ft 9 in, or leave it blank.",
+      });
+    }
     if (!draft.activity) {
       errors.push({
         field: "activity",
@@ -503,21 +584,24 @@ export function OnboardingFlow({
       );
       return;
     }
-    if (draft.meals[meal].includes(food.id)) {
-      setAnnouncement(`${food.name} is already in ${meal}.`);
-      return;
-    }
     setDraft((current) => ({
       ...current,
-      meals: { ...current.meals, [meal]: [...current.meals[meal], food.id] },
+      meals: {
+        ...current.meals,
+        [meal]: normalizeMealFoodSlugs([...current.meals[meal], food.id]),
+      },
     }));
-    setAnnouncement(`${food.name} added to ${meal}.`);
+    setAnnouncement(
+      draft.meals[meal].includes(food.id)
+        ? `${food.name} is already in ${meal}.`
+        : `${food.name} added to ${meal}.`,
+    );
   }
 
   function setMeal(meal: Meal, ids: string[]) {
     setDraft((current) => ({
       ...current,
-      meals: { ...current.meals, [meal]: ids },
+      meals: { ...current.meals, [meal]: normalizeMealFoodSlugs(ids) },
       acknowledgedWarnings: [],
     }));
   }
@@ -613,6 +697,7 @@ export function OnboardingFlow({
         }),
       });
       if (!response.ok) throw new Error();
+      await loadCatalogFoods();
       window.localStorage.removeItem("cutting-plan-registration-draft");
       goToStep(3);
       setAnnouncement("Email verified. Food preferences are next.");
@@ -755,6 +840,11 @@ export function OnboardingFlow({
     setPending(true);
     setCompletionPhase("saving");
     try {
+      if (draftSaveTimerRef.current !== null) {
+        window.clearTimeout(draftSaveTimerRef.current);
+        draftSaveTimerRef.current = null;
+      }
+      await draftSaveQueueRef.current.catch(() => undefined);
       const response = await fetch("/api/onboarding", {
         method: "PUT",
         headers: { "content-type": "application/json" },
@@ -765,7 +855,20 @@ export function OnboardingFlow({
           completed: true,
         }),
       });
-      if (!response.ok) throw new Error("profile_save_failed");
+      const result =
+        typeof response.json === "function"
+          ? ((await response.json().catch(() => null)) as ApiFailure | null)
+          : null;
+      if (!response.ok) {
+        const failure = completionFailure(result);
+        showPageErrors(
+          [{ field: failure.field, message: failure.message }],
+          failure.heading,
+        );
+        setPending(false);
+        setCompletionPhase(null);
+        return;
+      }
       window.localStorage.removeItem("cutting-plan-onboarding-draft");
       if (!generate) {
         router.push("/today");
@@ -1036,7 +1139,16 @@ export function OnboardingFlow({
               <h1>Add context if it helps.</h1>
               <p>These questions are optional. They help the app avoid unsuitable suggestions and communicate uncertainty.</p>
               <div className="field-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-                <label className="field"><span>Height (optional)</span><input value={draft.height} onChange={(event) => update("height", event.target.value)} placeholder="e.g. 175 cm" /></label>
+                <label className="field">
+                  <span>Height (optional)</span>
+                  <input
+                    aria-invalid={hasPageError("height") || undefined}
+                    value={draft.height}
+                    onChange={(event) => update("height", event.target.value)}
+                    placeholder="e.g. 175 cm or 5 ft 9 in"
+                  />
+                  <span className="field-help">Use centimeters or feet and inches.</span>
+                </label>
                 <label className="field"><span>Activity level</span><select aria-invalid={hasPageError("activity") || undefined} value={draft.activity} onChange={(event) => update("activity", event.target.value)}><option value="low">Mostly seated</option><option value="light">Lightly active</option><option value="moderate">Moderately active</option><option value="high">Highly active</option></select></label>
                 <label className="field"><span>Strength training days / week</span><input type="number" min="0" max="7" aria-invalid={hasPageError("trainingDays") || undefined} value={draft.trainingDays} onChange={(event) => update("trainingDays", event.target.value)} /></label>
                 <label className="field"><span>IANA time zone</span><select aria-invalid={hasPageError("timeZone") || undefined} value={draft.timeZone} onChange={(event) => update("timeZone", event.target.value)}><option>UTC</option><option>America/New_York</option><option>America/Chicago</option><option>America/Denver</option><option>America/Los_Angeles</option><option>Europe/London</option><option>Asia/Shanghai</option></select></label>

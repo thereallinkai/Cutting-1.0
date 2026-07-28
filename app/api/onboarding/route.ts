@@ -3,12 +3,21 @@ import type { Database, Json } from "@/src/types/database";
 import { localDateInTimeZone } from "@/src/lib/domain";
 import { apiError, apiSuccess } from "@/src/lib/api-response";
 import { isDevelopmentDemo } from "@/src/lib/env";
+import {
+  normalizeMealFoodSlugs,
+  parseOptionalHeight,
+} from "@/src/lib/onboarding-input";
 import { createSupabaseServerClient } from "@/src/lib/supabase/server";
 
+const mealSelectionSchema = z
+  .array(z.string().min(1).max(120))
+  .max(50)
+  .transform(normalizeMealFoodSlugs);
+
 const mealSchema = z.object({
-  breakfast: z.array(z.string()).max(50),
-  lunch: z.array(z.string()).max(50),
-  dinner: z.array(z.string()).max(50),
+  breakfast: mealSelectionSchema,
+  lunch: mealSelectionSchema,
+  dinner: mealSelectionSchema,
 });
 
 const draftSchema = z
@@ -57,8 +66,8 @@ const completionSchema = draftSchema.extend({
       && trainingDays >= 0
       && trainingDays <= 7;
   }),
-  currentWeightKg: z.number().positive().max(500),
-  targetWeightKg: z.number().positive().max(500),
+  currentWeightKg: z.number().min(20).max(500),
+  targetWeightKg: z.number().min(20).max(500),
   completed: z.literal(true),
 });
 
@@ -75,6 +84,13 @@ type NullableCompleteOnboardingArgs = Omit<
 
 function toJson(value: unknown): Json {
   return JSON.parse(JSON.stringify(value)) as Json;
+}
+
+function isCalendarDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(date.valueOf())
+    && date.toISOString().slice(0, 10) === value;
 }
 
 async function requireUser() {
@@ -130,6 +146,14 @@ export async function PUT(request: Request) {
   if (!parsed.data.targetDate) {
     return apiError("TARGET_DATE_REQUIRED", "Choose a target date before completing onboarding.", 422);
   }
+  const parsedHeight = parseOptionalHeight(parsed.data.height);
+  if (!parsedHeight.ok) {
+    return apiError(
+      "INVALID_HEIGHT",
+      "Enter a height from 50 to 300 cm, such as 175 cm or 5 ft 9 in, or leave it blank.",
+      422,
+    );
+  }
   if (isDevelopmentDemo()) return apiSuccess({ completed: true, goalId: "demo-goal" });
 
   try {
@@ -180,33 +204,56 @@ export async function PUT(request: Request) {
       maintenance: "maintenance",
       recomposition: "body_recomposition",
     } as const;
-    const heightValue = Number(parsed.data.height.replace(/[^\d.]/g, ""));
     const trainingValue = Number(parsed.data.trainingDays);
+    let planStartDate: string;
+    try {
+      planStartDate = localDateInTimeZone(new Date(), parsed.data.timeZone);
+    } catch {
+      return apiError(
+        "INVALID_TIME_ZONE",
+        "Choose a supported time zone before completing onboarding.",
+        422,
+      );
+    }
+    if (!isCalendarDate(parsed.data.targetDate)
+      || parsed.data.targetDate < planStartDate) {
+      return apiError(
+        "INVALID_TARGET_DATE",
+        "Choose a target date that is today or later.",
+        422,
+      );
+    }
+    const dietaryRestrictions = parsed.data.restrictions
+      ? parsed.data.restrictions.split(",").map((item) => item.trim()).filter(Boolean)
+      : [];
+    const allergies = parsed.data.allergies
+      ? parsed.data.allergies.split(",").map((item) => item.trim()).filter(Boolean)
+      : [];
+    if (dietaryRestrictions.length > 50 || allergies.length > 50) {
+      return apiError(
+        "TOO_MANY_RESTRICTIONS",
+        "Use no more than 50 comma-separated allergies or dietary restrictions.",
+        422,
+      );
+    }
 
     const completeOnboardingArgs = {
       profile_gender_value: profile.gender,
       profile_age: profile.age,
-      profile_height_cm: Number.isFinite(heightValue) && heightValue > 0 ? heightValue : null,
+      profile_height_cm: parsedHeight.heightCm,
       profile_weight_unit: parsed.data.unit,
       profile_time_zone: parsed.data.timeZone,
       profile_activity_level: activityMap[parsed.data.activity],
       profile_training_days: trainingValue,
-      profile_dietary_restrictions: parsed.data.restrictions
-        ? parsed.data.restrictions.split(",").map((item) => item.trim()).filter(Boolean)
-        : [],
-      profile_allergies: parsed.data.allergies
-        ? parsed.data.allergies.split(",").map((item) => item.trim()).filter(Boolean)
-        : [],
+      profile_dietary_restrictions: dietaryRestrictions,
+      profile_allergies: allergies,
       profile_disliked_foods: [],
       profile_safety_context: parsed.data.safety.join("; ") || null,
       profile_notes: parsed.data.notes || null,
       selected_goal_type: goalMap[parsed.data.goalType],
       current_weight_kg: parsed.data.currentWeightKg,
       target_weight_kg: parsed.data.targetWeightKg,
-      plan_start_date: localDateInTimeZone(
-        new Date(),
-        parsed.data.timeZone,
-      ),
+      plan_start_date: planStartDate,
       target_date: parsed.data.targetDate,
       preferences: toJson(preferences),
       acknowledged_warnings: toJson(parsed.data.acknowledgedWarnings),
@@ -219,6 +266,26 @@ export async function PUT(request: Request) {
       completeOnboardingArgs as CompleteOnboardingArgs,
     );
     if (error) {
+      console.error("complete_onboarding RPC failed", {
+        code: error.code,
+      });
+      if (
+        error.code === "23514"
+        && error.message.includes("Terms and privacy acceptance")
+      ) {
+        return apiError(
+          "LEGAL_ACCEPTANCE_REQUIRED",
+          "Your Terms and Privacy acceptance could not be verified. Sign in again or recreate this test account.",
+          409,
+        );
+      }
+      if (error.code === "23505") {
+        return apiError(
+          "DUPLICATE_MEAL_FOOD",
+          "A food was selected more than once for the same meal. Review the meal selections and try again.",
+          409,
+        );
+      }
       return apiError("ONBOARDING_SAVE_FAILED", "The final onboarding step could not be saved.", 500);
     }
     return apiSuccess({ completed: true, goalId });

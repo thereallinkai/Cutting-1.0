@@ -33,5 +33,5 @@ export const DEMO_CATALOG: DemoCatalogFood[] = [
   { slug: "apples", englishName: "Apples", categories: ["Fruit", "Carbohydrate"], verificationStatus: "verified" },
   { slug: "olive-oil", englishName: "Olive oil", categories: ["Fat"], verificationStatus: "verified" },
   { slug: "whey-protein-isolate", englishName: "Whey protein isolate", categories: ["Protein", "Supplement"], verificationStatus: "pending_verification" },
-  { slug: "vegetable-vitamin-powder", englishName: "Vegetable or vitamin powder", categories: ["Supplement"], verificationStatus: "pending_verification" },
+  { slug: "vegetable-or-vitamin-powder", englishName: "Vegetable or vitamin powder", categories: ["Supplement"], verificationStatus: "pending_verification" },
 ];
