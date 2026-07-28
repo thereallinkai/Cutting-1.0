@@ -94,7 +94,7 @@ export async function PUT(
       desired_breakfast_completed: parsed.data.breakfastCompleted,
       desired_lunch_completed: parsed.data.lunchCompleted,
       desired_dinner_completed: parsed.data.dinnerCompleted,
-      checkin_notes: parsed.data.notes ?? null,
+      ...(parsed.data.notes == null ? {} : { checkin_notes: parsed.data.notes }),
     });
     if (error) return apiError("CHECKIN_SAVE_FAILED", "The check-in could not be saved.", 500);
     return apiSuccess(data);

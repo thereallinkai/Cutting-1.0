@@ -783,10 +783,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      accept_plan: {
-        Args: { target_plan_id: string }
-        Returns: string
-      }
+      accept_plan: { Args: { target_plan_id: string }; Returns: string }
       application_health: {
         Args: { expected_migration: string }
         Returns: Json
@@ -797,21 +794,17 @@ export type Database = {
           current_weight_kg: number
           plan_start_date: string
           preferences: Json
-          profile_activity_level:
-            | Database["public"]["Enums"]["activity_level"]
-            | null
-          profile_age: number | null
-          profile_allergies: string[] | null
-          profile_dietary_restrictions: string[] | null
-          profile_disliked_foods: string[] | null
-          profile_gender_value:
-            | Database["public"]["Enums"]["profile_gender"]
-            | null
-          profile_height_cm: number | null
-          profile_notes: string | null
-          profile_safety_context: string | null
+          profile_activity_level: Database["public"]["Enums"]["activity_level"]
+          profile_age: number
+          profile_allergies: string[]
+          profile_dietary_restrictions: string[]
+          profile_disliked_foods: string[]
+          profile_gender_value: Database["public"]["Enums"]["profile_gender"]
+          profile_height_cm: number
+          profile_notes: string
+          profile_safety_context: string
           profile_time_zone: string
-          profile_training_days: number | null
+          profile_training_days: number
           profile_weight_unit: Database["public"]["Enums"]["weight_unit"]
           selected_goal_type: Database["public"]["Enums"]["goal_type"]
           target_date: string
@@ -835,12 +828,28 @@ export type Database = {
       upsert_daily_checkin: {
         Args: {
           checkin_date: string
-          checkin_notes?: string | null
+          checkin_notes?: string
           desired_breakfast_completed: boolean
           desired_dinner_completed: boolean
           desired_lunch_completed: boolean
         }
-        Returns: Database["public"]["Tables"]["daily_checkins"]["Row"]
+        Returns: {
+          breakfast_completed: boolean
+          created_at: string
+          dinner_completed: boolean
+          id: string
+          local_date: string
+          lunch_completed: boolean
+          notes: string | null
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "daily_checkins"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
     }
     Enums: {
@@ -854,10 +863,7 @@ export type Database = {
       food_ownership_type: "catalog" | "private"
       goal_status: "draft" | "active" | "completed" | "cancelled" | "archived"
       goal_type:
-        | "fat_loss"
-        | "muscle_gain"
-        | "maintenance"
-        | "body_recomposition"
+        "fat_loss" | "muscle_gain" | "maintenance" | "body_recomposition"
       legal_document_type: "terms" | "privacy"
       meal_type: "breakfast" | "lunch" | "dinner"
       measurement_basis: "raw" | "dry" | "cooked" | "as_sold" | "label_serving"
@@ -865,12 +871,10 @@ export type Database = {
       onboarding_status: "not_started" | "in_progress" | "completed"
       plan_status: "generated" | "accepted" | "superseded" | "archived"
       portion_unit: "g" | "ml" | "serving" | "piece"
-      profile_gender: "male" | "female" | "another_identity" | "prefer_not_to_say"
+      profile_gender:
+        "male" | "female" | "another_identity" | "prefer_not_to_say"
       verification_status:
-        | "verified"
-        | "user_label"
-        | "pending_verification"
-        | "unavailable"
+        "verified" | "user_label" | "pending_verification" | "unavailable"
       warning_context_type: "onboarding" | "plan"
       weight_unit: "kg" | "lb"
     }
@@ -880,21 +884,25 @@ export type Database = {
   }
 }
 
-type DefaultSchema = Database[Extract<keyof Database, "public">]
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
 
 export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
-    | { schema: keyof Database },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof Database
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
   }
-    ? keyof (Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
-        Database[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
-> = DefaultSchemaTableNameOrOptions extends { schema: keyof Database }
-  ? (Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
-      Database[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never) = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
       Row: infer R
     }
     ? R
@@ -911,15 +919,16 @@ export type Tables<
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof Database },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof Database
+    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
   }
-    ? keyof Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
-> = DefaultSchemaTableNameOrOptions extends { schema: keyof Database }
-  ? Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never) = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
       Insert: infer I
     }
     ? I
@@ -934,15 +943,16 @@ export type TablesInsert<
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof Database },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof Database
+    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
   }
-    ? keyof Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
-> = DefaultSchemaTableNameOrOptions extends { schema: keyof Database }
-  ? Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never) = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
       Update: infer U
     }
     ? U
@@ -957,15 +967,16 @@ export type TablesUpdate<
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
-    | keyof DefaultSchema["Enums"]
-    | { schema: keyof Database },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
-    schema: keyof Database
+    keyof DefaultSchema["Enums"] | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
   }
-    ? keyof Database[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
-> = DefaultSchemaEnumNameOrOptions extends { schema: keyof Database }
-  ? Database[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never) = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
   : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
     ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
     : never
@@ -973,14 +984,16 @@ export type Enums<
 export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
-    | { schema: keyof Database },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
-    schema: keyof Database
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
   }
-    ? keyof Database[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
-> = PublicCompositeTypeNameOrOptions extends { schema: keyof Database }
-  ? Database[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never) = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
   : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
     ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
     : never

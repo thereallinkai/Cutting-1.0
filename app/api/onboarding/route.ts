@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { Json } from "@/src/types/database";
+import type { Database, Json } from "@/src/types/database";
 import { localDateInTimeZone } from "@/src/lib/domain";
 import { apiError, apiSuccess } from "@/src/lib/api-response";
 import { isDevelopmentDemo } from "@/src/lib/env";
@@ -49,10 +49,29 @@ const patchSchema = z.object({
 });
 
 const completionSchema = draftSchema.extend({
+  activity: z.enum(["low", "light", "moderate", "high"]),
+  trainingDays: z.string().refine((value) => {
+    const trainingDays = Number(value);
+    return value.trim().length > 0
+      && Number.isInteger(trainingDays)
+      && trainingDays >= 0
+      && trainingDays <= 7;
+  }),
   currentWeightKg: z.number().positive().max(500),
   targetWeightKg: z.number().positive().max(500),
   completed: z.literal(true),
 });
+
+type CompleteOnboardingArgs =
+  Database["public"]["Functions"]["complete_onboarding"]["Args"];
+type NullableCompleteOnboardingArgs = Omit<
+  CompleteOnboardingArgs,
+  "profile_height_cm" | "profile_notes" | "profile_safety_context"
+> & {
+  profile_height_cm: number | null;
+  profile_notes: string | null;
+  profile_safety_context: string | null;
+};
 
 function toJson(value: unknown): Json {
   return JSON.parse(JSON.stringify(value)) as Json;
@@ -122,7 +141,12 @@ export async function PUT(request: Request) {
       .select("age,gender")
       .eq("user_id", user.id)
       .single();
-    if (profileError || !profile) {
+    if (
+      profileError
+      || !profile
+      || profile.gender === null
+      || profile.age === null
+    ) {
       return apiError("PROFILE_REQUIRED", "Complete the account profile before onboarding.", 409);
     }
 
@@ -159,17 +183,14 @@ export async function PUT(request: Request) {
     const heightValue = Number(parsed.data.height.replace(/[^\d.]/g, ""));
     const trainingValue = Number(parsed.data.trainingDays);
 
-    const { data: goalId, error } = await supabase.rpc("complete_onboarding", {
+    const completeOnboardingArgs = {
       profile_gender_value: profile.gender,
       profile_age: profile.age,
       profile_height_cm: Number.isFinite(heightValue) && heightValue > 0 ? heightValue : null,
       profile_weight_unit: parsed.data.unit,
       profile_time_zone: parsed.data.timeZone,
-      profile_activity_level: activityMap[parsed.data.activity as keyof typeof activityMap] ?? null,
-      profile_training_days:
-        Number.isInteger(trainingValue) && trainingValue >= 0 && trainingValue <= 7
-          ? trainingValue
-          : null,
+      profile_activity_level: activityMap[parsed.data.activity],
+      profile_training_days: trainingValue,
       profile_dietary_restrictions: parsed.data.restrictions
         ? parsed.data.restrictions.split(",").map((item) => item.trim()).filter(Boolean)
         : [],
@@ -189,7 +210,14 @@ export async function PUT(request: Request) {
       target_date: parsed.data.targetDate,
       preferences: toJson(preferences),
       acknowledged_warnings: toJson(parsed.data.acknowledgedWarnings),
-    });
+    } satisfies NullableCompleteOnboardingArgs;
+
+    // PostgreSQL accepts NULL for these nullable parameters. Supabase CLI
+    // 2.109.1 omits those null unions from its generated RPC argument type.
+    const { data: goalId, error } = await supabase.rpc(
+      "complete_onboarding",
+      completeOnboardingArgs as CompleteOnboardingArgs,
+    );
     if (error) {
       return apiError("ONBOARDING_SAVE_FAILED", "The final onboarding step could not be saved.", 500);
     }

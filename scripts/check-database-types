@@ -11,6 +11,19 @@ COMMITTED_TYPES="src/types/database.ts"
   exit 1
 }
 
+github_error() {
+  local file="$1"
+  local title="$2"
+  local details="$3"
+
+  if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
+    details="${details//'%'/'%25'}"
+    details="${details//$'\r'/'%0D'}"
+    details="${details//$'\n'/'%0A'}"
+    printf '::error file=%s,title=%s::%s\n' "$file" "$title" "$details"
+  fi
+}
+
 [[ -x node_modules/.bin/supabase ]] && command -v npx >/dev/null 2>&1 || {
   printf 'ERROR: The project-local Supabase CLI is missing. Run npm ci first.\n' >&2
   exit 1
@@ -33,7 +46,17 @@ npx --no-install supabase gen types typescript --local > "$GENERATED_TYPES"
 if ! cmp --silent "$COMMITTED_TYPES" "$GENERATED_TYPES"; then
   printf 'ERROR: Generated database types do not match the running local migrations.\n' >&2
   printf 'Run npm run bootstrap, review src/types/database.ts, and commit the result.\n' >&2
-  diff --unified "$COMMITTED_TYPES" "$GENERATED_TYPES" || true
+  TYPE_DIFF="$(diff --unified "$COMMITTED_TYPES" "$GENERATED_TYPES" || true)"
+  printf '%s\n' "$TYPE_DIFF"
+  github_error "$COMMITTED_TYPES" "Generated database type drift" "$TYPE_DIFF"
+  exit 1
+fi
+
+if [[ "${GITHUB_ACTIONS:-}" == "true" ]] && ! git diff --quiet -- "$COMMITTED_TYPES"; then
+  printf 'ERROR: Bootstrap changed the committed database type file.\n' >&2
+  TYPE_DIFF="$(git diff -- "$COMMITTED_TYPES")"
+  printf '%s\n' "$TYPE_DIFF"
+  github_error "$COMMITTED_TYPES" "Bootstrap changed generated database types" "$TYPE_DIFF"
   exit 1
 fi
 

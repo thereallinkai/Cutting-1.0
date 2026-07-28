@@ -1,6 +1,6 @@
 # Cutting Plan
 
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://github.com/thereallinkai/Cutting-1.0/codespaces/new?quickstart=1)
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/thereallinkai/Cutting-1.0?quickstart=1)
 
 Cutting Plan is a calm, safety-aware meal-planning and habit-tracking application. It combines meal guidance, daily meal check-ins, weight-trend tracking, and a versioned plan workflow without presenting estimates as medical facts or guaranteeing a body-weight outcome.
 
