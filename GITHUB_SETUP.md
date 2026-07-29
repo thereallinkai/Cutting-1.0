@@ -39,6 +39,10 @@ changes, with an unexpected remote, or when local `HEAD` is not already the
 commit on `origin/main`. This ensures protection is not enabled while completed
 work is still waiting to be pushed.
 
+Renaming a GitHub repository does not rename the directory of an already
+running Codespace. That existing workspace remains usable after `origin` is
+updated; a newly created Codespace uses the `Lets-Go-Green` repository name.
+
 GitHub CLI is installed by the committed Dev Container. If it is not
 authenticated, use GitHub's browser-based login and rerun the script:
 
