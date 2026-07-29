@@ -1522,17 +1522,9 @@ export type Database = {
         | "very_active"
         | "extremely_active"
       ai_request_status: "pending" | "processing" | "succeeded" | "failed"
-      food_catalog_status:
-        | "active"
-        | "pending_review"
-        | "rejected"
-        | "retired"
+      food_catalog_status: "active" | "pending_review" | "rejected" | "retired"
       food_kind: "generic" | "branded_product"
-      food_label_image_kind:
-        | "front"
-        | "nutrition"
-        | "ingredients"
-        | "barcode"
+      food_label_image_kind: "front" | "nutrition" | "ingredients" | "barcode"
       food_label_submission_status:
         | "draft"
         | "submitted"
@@ -1719,19 +1711,9 @@ export const Constants = {
         "extremely_active",
       ],
       ai_request_status: ["pending", "processing", "succeeded", "failed"],
-      food_catalog_status: [
-        "active",
-        "pending_review",
-        "rejected",
-        "retired",
-      ],
+      food_catalog_status: ["active", "pending_review", "rejected", "retired"],
       food_kind: ["generic", "branded_product"],
-      food_label_image_kind: [
-        "front",
-        "nutrition",
-        "ingredients",
-        "barcode",
-      ],
+      food_label_image_kind: ["front", "nutrition", "ingredients", "barcode"],
       food_label_submission_status: [
         "draft",
         "submitted",
