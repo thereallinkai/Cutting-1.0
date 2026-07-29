@@ -2089,6 +2089,55 @@ details.message-box[open] > summary {
   grid-template-columns: repeat(2, 1fr);
 }
 
+.app-release-card {
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(184, 227, 109, 0.24), transparent 18rem),
+    var(--surface);
+}
+
+.app-release-card .card-title > svg {
+  color: var(--accent-dark);
+}
+
+.release-overview {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  border: 1px solid rgba(31, 107, 67, 0.14);
+  border-radius: 14px;
+  background: rgba(251, 254, 249, 0.78);
+  padding: 0.9rem;
+}
+
+.release-channel {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  border: 1px solid rgba(31, 107, 67, 0.22);
+  border-radius: 999px;
+  background: rgba(184, 227, 109, 0.28);
+  padding: 0.25rem 0.65rem;
+  color: var(--accent-dark);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.release-overview strong {
+  font-size: 0.92rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.release-overview p {
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
 .section-actions {
   display: flex;
   justify-content: flex-end;

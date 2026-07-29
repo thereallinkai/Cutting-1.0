@@ -31,7 +31,8 @@
   "portsAttributes": {
     "3000": {
       "label": "Let's Go Green!",
-      "onAutoForward": "openPreview",
+      "onAutoForward": "openBrowser",
+      "protocol": "http",
       "visibility": "private"
     },
     "54321": {

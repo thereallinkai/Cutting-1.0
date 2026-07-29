@@ -12,7 +12,7 @@ GitHub Codespaces is the recommended path because it does not install project
 software directly on your computer.
 
 1. Open
-   [thereallinkai/Cutting-1.0](https://github.com/thereallinkai/Cutting-1.0).
+   [thereallinkai/Lets-Go-Green](https://github.com/thereallinkai/Lets-Go-Green).
 2. Select **Code → Codespaces → Create codespace on main**, or use the
    **Open in GitHub Codespaces** badge in `README.md`.
 3. Use at least 4 CPU cores, 8 GB memory, and 32 GB storage.
@@ -36,12 +36,30 @@ software directly on your computer.
 
    You can instead use **Terminal → Run Task → Start Let's Go Green!**.
 
-8. Open the privately forwarded **Let's Go Green!** port. Keep ports 3000 and
-   54321–54324 private.
+8. Keep the start terminal running. When Next.js prints `✓ Ready`, open the
+   privately forwarded **Let's Go Green!** port with the globe icon or
+   **Open in Browser**. Keep ports 3000 and 54321–54324 private. No extra wait
+   is required after `✓ Ready`.
 9. In the Codespaces **Ports** panel, also note:
 
    - **Supabase Studio** on port 54323.
    - **Local captured email** on port 54324.
+
+   Open the row labeled **Let's Go Green!** on port 3000, not the API on 54321
+   or PostgreSQL on 54322. If port 3000 opens a download prompt instead of the
+   application, right-click it and select **Change Port Protocol → HTTP**,
+   confirm its visibility is **Private**, and reopen it in the browser.
+   Existing Codespaces remember port protocol choices. If needed, stop
+   forwarding only port 3000, add port 3000 again, and repeat those settings.
+   Verify the app independently from a second terminal:
+
+   ```bash
+   curl --fail --silent --show-error http://127.0.0.1:3000/api/health
+   npm run doctor
+   ```
+
+   The first doctor run before `npm run dev:all` is expected to report that
+   Next.js is not ready. After `✓ Ready`, the second doctor run should pass.
 
 10. For live USDA testing, add a real server-only `USDA_FDC_API_KEY` to the
     ignored `.env.local`, or accept the rate-limited non-production `DEMO_KEY`.
@@ -50,7 +68,7 @@ software directly on your computer.
 
     ```dotenv
     USDA_FDC_API_KEY=
-    FOOD_LOOKUP_USER_AGENT=LetsGoGreen/0.1 (https://github.com/thereallinkai/Cutting-1.0)
+    FOOD_LOOKUP_USER_AGENT=LetsGoGreen/1.0.0-beta.1 (https://github.com/thereallinkai/Lets-Go-Green)
     ```
 
     Restart `npm run dev:all` after changing environment values. Open Food Facts

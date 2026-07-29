@@ -26,7 +26,7 @@ const serverEnvSchema = publicEnvSchema.extend({
     .min(8)
     .max(300)
     .default(
-      "LetsGoGreen/0.1 (https://github.com/thereallinkai/Cutting-1.0)",
+      "LetsGoGreen/1.0.0-beta.1 (https://github.com/thereallinkai/Lets-Go-Green)",
     ),
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
   DATABASE_URL: z.string().optional(),

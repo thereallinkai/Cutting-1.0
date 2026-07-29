@@ -11,6 +11,7 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
+import { AppReleaseCard } from "@/components/app-release-card";
 import { FoodLabelUpload } from "@/components/food-label-upload";
 
 export type SettingsGoalType =
@@ -101,6 +102,7 @@ const sections = [
   ["ai", "AI plan"],
   ["security", "Security"],
   ["data", "Your data"],
+  ["about", "About"],
 ];
 
 const goalLabels: Record<SettingsGoalType, string> = {
@@ -834,6 +836,8 @@ export function SettingsView({
               </button>
             </div>
           </section>
+
+          <AppReleaseCard />
 
           <section className="card settings-section danger-zone">
             <div className="card-title">

@@ -1,9 +1,17 @@
 {
   "name": "lets-go-green",
-  "version": "0.1.0",
+  "version": "1.0.0-beta.1",
   "private": true,
   "description": "Let's Go Green! is a calm, safety-aware meal planning and habit tracking application.",
   "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/thereallinkai/Lets-Go-Green.git"
+  },
+  "bugs": {
+    "url": "https://github.com/thereallinkai/Lets-Go-Green/issues"
+  },
+  "homepage": "https://github.com/thereallinkai/Lets-Go-Green#readme",
   "engines": {
     "node": ">=22.0.0 <23"
   },

@@ -1,0 +1,374 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+readonly github_host="github.com"
+readonly repository_owner="thereallinkai"
+readonly old_repository_name="Cutting-1.0"
+readonly new_repository_name="Lets-Go-Green"
+readonly protected_ruleset_name="Protect main"
+readonly required_check_name="Local mock-backed suite"
+readonly expected_old_repository="${repository_owner}/${old_repository_name}"
+readonly expected_new_repository="${repository_owner}/${new_repository_name}"
+readonly expected_new_origin="git@github.com:${expected_new_repository}.git"
+readonly api_version="2022-11-28"
+
+ruleset_payload=""
+
+cleanup() {
+  if [[ -n "${ruleset_payload}" && -f "${ruleset_payload}" ]]; then
+    rm -f -- "${ruleset_payload}"
+  fi
+}
+
+trap cleanup EXIT
+
+fail() {
+  printf 'ERROR: %s\n' "$*" >&2
+  exit 1
+}
+
+info() {
+  printf '%s\n' "$*"
+}
+
+require_command() {
+  command -v "$1" >/dev/null 2>&1 ||
+    fail "Required command '$1' is unavailable."
+}
+
+github_api() {
+  gh api \
+    --hostname "${github_host}" \
+    --header "Accept: application/vnd.github+json" \
+    --header "X-GitHub-Api-Version: ${api_version}" \
+    "$@"
+}
+
+resolved_repository_name() {
+  local repository="$1"
+
+  github_api "repos/${repository}" --jq '.full_name' 2>/dev/null || true
+}
+
+canonical_github_repository_from_remote() {
+  local remote_url="$1"
+  local repository=""
+
+  case "${remote_url}" in
+    git@github.com:*)
+      repository="${remote_url#git@github.com:}"
+      ;;
+    ssh://git@github.com/*)
+      repository="${remote_url#ssh://git@github.com/}"
+      ;;
+    https://github.com/*)
+      repository="${remote_url#https://github.com/}"
+      ;;
+    http://github.com/*)
+      repository="${remote_url#http://github.com/}"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+
+  repository="${repository%.git}"
+  repository="${repository%/}"
+  printf '%s\n' "${repository}"
+}
+
+verify_ruleset() {
+  local ruleset_id="$1"
+  local identity=""
+  local conditions_are_exact=""
+  local rule_types=""
+  local pull_request_parameters_are_exact=""
+  local status_check_parameters_are_exact=""
+  local active_rule_types=""
+  local branch_is_protected=""
+
+  identity="$(
+    github_api "repos/${expected_new_repository}/rulesets/${ruleset_id}" \
+      --jq '[.name, .target, .enforcement] | @tsv'
+  )"
+  [[ "${identity}" == $'Protect main\tbranch\tactive' ]] ||
+    fail "The resulting ruleset identity or enforcement is not the expected active branch ruleset."
+
+  conditions_are_exact="$(
+    github_api "repos/${expected_new_repository}/rulesets/${ruleset_id}" \
+      --jq '
+        ((.conditions.ref_name.include // []) == ["~DEFAULT_BRANCH"])
+        and ((.conditions.ref_name.exclude // []) == [])
+      '
+  )"
+  [[ "${conditions_are_exact}" == "true" ]] ||
+    fail "The ruleset does not target only the default branch."
+
+  rule_types="$(
+    github_api "repos/${expected_new_repository}/rulesets/${ruleset_id}" \
+      --jq '[.rules[].type] | sort | join(",")'
+  )"
+  [[ "${rule_types}" == "deletion,non_fast_forward,pull_request,required_status_checks" ]] ||
+    fail "The ruleset has an unexpected set of rules: ${rule_types}."
+
+  pull_request_parameters_are_exact="$(
+    github_api "repos/${expected_new_repository}/rulesets/${ruleset_id}" \
+      --jq '
+        first(.rules[] | select(.type == "pull_request")).parameters
+        | ((.allowed_merge_methods | sort) == ["merge", "rebase", "squash"])
+          and (.dismiss_stale_reviews_on_push == false)
+          and (.require_code_owner_review == false)
+          and (.require_last_push_approval == false)
+          and (.required_approving_review_count == 0)
+          and (.required_review_thread_resolution == true)
+      '
+  )"
+  [[ "${pull_request_parameters_are_exact}" == "true" ]] ||
+    fail "The pull-request rule does not match the intended solo-maintainer policy."
+
+  status_check_parameters_are_exact="$(
+    github_api "repos/${expected_new_repository}/rulesets/${ruleset_id}" \
+      --jq '
+        first(.rules[] | select(.type == "required_status_checks")).parameters
+        | (.do_not_enforce_on_create == false)
+          and (.strict_required_status_checks_policy == true)
+          and ((.required_status_checks | length) == 1)
+          and (.required_status_checks[0].context == "Local mock-backed suite")
+          and (.required_status_checks[0].integration_id == null)
+      '
+  )"
+  [[ "${status_check_parameters_are_exact}" == "true" ]] ||
+    fail "The required status-check rule does not match '${required_check_name}'."
+
+  active_rule_types="$(
+    github_api "repos/${expected_new_repository}/rules/branches/main" \
+      --paginate \
+      --jq "
+        [.[] | select(.ruleset_id == ${ruleset_id}) | .type]
+        | sort
+        | join(\",\")
+      "
+  )"
+  [[ "${active_rule_types}" == "deletion,non_fast_forward,pull_request,required_status_checks" ]] ||
+    fail "The expected rules are not all active on main: ${active_rule_types}."
+
+  branch_is_protected="$(
+    github_api "repos/${expected_new_repository}/branches/main" --jq '.protected'
+  )"
+  [[ "${branch_is_protected}" == "true" ]] ||
+    fail "GitHub does not report the default main branch as protected."
+}
+
+require_command git
+require_command gh
+
+repository_root="$(git rev-parse --show-toplevel 2>/dev/null)" ||
+  fail "Run this command from inside the Let's Go Green! Git checkout."
+cd "${repository_root}"
+
+[[ -z "$(git status --porcelain)" ]] ||
+  fail "The worktree is not clean. Commit and push the intended changes before configuring GitHub."
+
+current_branch="$(git branch --show-current)"
+[[ "${current_branch}" == "main" ]] ||
+  fail "Switch to the local main branch before configuring protection (current: ${current_branch:-detached HEAD})."
+
+origin_url="$(git remote get-url origin 2>/dev/null)" ||
+  fail "This checkout does not have an origin remote."
+origin_repository="$(canonical_github_repository_from_remote "${origin_url}")" ||
+  fail "The origin remote is not a recognized github.com URL: ${origin_url}"
+
+case "${origin_repository}" in
+  "${expected_old_repository}"|"${expected_new_repository}")
+    ;;
+  *)
+    fail \
+      "Refusing to administer unexpected origin '${origin_repository}'." \
+      "Expected '${expected_old_repository}' or '${expected_new_repository}'."
+    ;;
+esac
+
+remote_main_commit="$(
+  git ls-remote --exit-code origin refs/heads/main 2>/dev/null | awk 'NR == 1 { print $1 }'
+)" || fail "Could not read origin/main. Check network access and the origin remote."
+local_commit="$(git rev-parse HEAD)"
+[[ "${local_commit}" == "${remote_main_commit}" ]] ||
+  fail \
+    "Local HEAD (${local_commit}) is not the pushed origin/main commit" \
+    "(${remote_main_commit}). Push the completed work before enabling protection."
+
+gh auth status --hostname "${github_host}" >/dev/null 2>&1 ||
+  fail "GitHub CLI is not authenticated. Run 'gh auth login --hostname github.com --web --scopes repo' and retry."
+
+github_login="$(github_api user --jq '.login')" ||
+  fail "The authenticated GitHub account could not be read."
+info "Authenticated to GitHub as ${github_login}."
+
+old_resolved_repository="$(resolved_repository_name "${expected_old_repository}")"
+new_resolved_repository="$(resolved_repository_name "${expected_new_repository}")"
+
+if [[ "${old_resolved_repository}" == "${expected_old_repository}" &&
+      "${new_resolved_repository}" == "${expected_new_repository}" ]]; then
+  fail \
+    "Both '${expected_old_repository}' and '${expected_new_repository}' exist." \
+    "Refusing to rename over another repository."
+fi
+
+if [[ "${new_resolved_repository}" == "${expected_new_repository}" ]]; then
+  current_repository="${expected_new_repository}"
+elif [[ "${old_resolved_repository}" == "${expected_old_repository}" ]]; then
+  current_repository="${expected_old_repository}"
+else
+  fail "Neither expected repository could be resolved with the authenticated account."
+fi
+
+has_admin_permission="$(
+  github_api "repos/${current_repository}" --jq '.permissions.admin // false'
+)"
+if [[ "${has_admin_permission}" != "true" ]]; then
+  fail \
+    "The active GitHub CLI credential does not have Administration access to" \
+    "'${current_repository}'. In Codespaces, unset GH_TOKEN and GITHUB_TOKEN," \
+    "authenticate gh with the repository-owner account and the 'repo' scope," \
+    "then retry."
+fi
+
+if [[ "${current_repository}" == "${expected_old_repository}" ]]; then
+  info "Renaming ${expected_old_repository} to ${expected_new_repository}..."
+  renamed_repository="$(
+    github_api "repos/${expected_old_repository}" \
+      --method PATCH \
+      --field "name=${new_repository_name}" \
+      --jq '.full_name'
+  )"
+  [[ "${renamed_repository}" == "${expected_new_repository}" ]] ||
+    fail "GitHub returned an unexpected repository name after the rename: ${renamed_repository}."
+else
+  info "Repository is already named ${expected_new_repository}; no rename needed."
+fi
+
+git remote set-url origin "${expected_new_origin}"
+info "Updated origin to ${expected_new_origin}."
+
+ruleset_payload="$(mktemp "${TMPDIR:-/tmp}/lets-go-green-ruleset.XXXXXX.json")"
+cat >"${ruleset_payload}" <<'JSON'
+{
+  "name": "Protect main",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": {
+    "ref_name": {
+      "include": [
+        "~DEFAULT_BRANCH"
+      ],
+      "exclude": []
+    }
+  },
+  "rules": [
+    {
+      "type": "deletion"
+    },
+    {
+      "type": "non_fast_forward"
+    },
+    {
+      "type": "pull_request",
+      "parameters": {
+        "allowed_merge_methods": [
+          "merge",
+          "squash",
+          "rebase"
+        ],
+        "dismiss_stale_reviews_on_push": false,
+        "require_code_owner_review": false,
+        "require_last_push_approval": false,
+        "required_approving_review_count": 0,
+        "required_review_thread_resolution": true
+      }
+    },
+    {
+      "type": "required_status_checks",
+      "parameters": {
+        "do_not_enforce_on_create": false,
+        "required_status_checks": [
+          {
+            "context": "Local mock-backed suite"
+          }
+        ],
+        "strict_required_status_checks_policy": true
+      }
+    }
+  ],
+  "bypass_actors": []
+}
+JSON
+
+matching_ruleset_ids_output="$(
+  github_api "repos/${expected_new_repository}/rulesets" \
+    --paginate \
+    --jq ".[] | select(.name == \"${protected_ruleset_name}\") | .id"
+)"
+matching_ruleset_ids=()
+if [[ -n "${matching_ruleset_ids_output}" ]]; then
+  while IFS= read -r matching_ruleset_id; do
+    matching_ruleset_ids+=("${matching_ruleset_id}")
+  done <<<"${matching_ruleset_ids_output}"
+fi
+
+case "${#matching_ruleset_ids[@]}" in
+  0)
+    info "Creating active '${protected_ruleset_name}' ruleset..."
+    ruleset_id="$(
+      github_api "repos/${expected_new_repository}/rulesets" \
+        --method POST \
+        --input "${ruleset_payload}" \
+        --jq '.id'
+    )"
+    ;;
+  1)
+    ruleset_id="${matching_ruleset_ids[0]}"
+    info "Updating existing '${protected_ruleset_name}' ruleset (${ruleset_id})..."
+    updated_ruleset_id="$(
+      github_api "repos/${expected_new_repository}/rulesets/${ruleset_id}" \
+        --method PUT \
+        --input "${ruleset_payload}" \
+        --jq '.id'
+    )"
+    [[ "${updated_ruleset_id}" == "${ruleset_id}" ]] ||
+      fail "GitHub returned an unexpected ruleset ID after the update."
+    ;;
+  *)
+    fail \
+      "Multiple rulesets named '${protected_ruleset_name}' exist." \
+      "Resolve the duplicate rulesets in GitHub before retrying."
+    ;;
+esac
+
+case "${ruleset_id}" in
+  ""|*[!0-9]*)
+    fail "GitHub returned an invalid ruleset ID: ${ruleset_id:-empty}."
+    ;;
+esac
+
+repository_identity="$(
+  github_api "repos/${expected_new_repository}" --jq '[.full_name, .default_branch] | @tsv'
+)"
+[[ "${repository_identity}" == $'thereallinkai/Lets-Go-Green\tmain' ]] ||
+  fail "The resulting repository identity or default branch is unexpected: ${repository_identity}."
+
+verify_ruleset "${ruleset_id}"
+
+configured_origin="$(git remote get-url origin)"
+[[ "${configured_origin}" == "${expected_new_origin}" ]] ||
+  fail "The origin remote was not updated to the expected SSH URL."
+
+info ""
+info "GitHub repository setup is complete and verified:"
+info "  Repository: https://github.com/${expected_new_repository}"
+info "  Default branch: main"
+info "  Ruleset: ${protected_ruleset_name} (active)"
+info "  Required check: ${required_check_name}"
+info "  Direct updates, force pushes, and deletion of main are blocked."
+info ""
+info "For future changes, push a feature branch and merge its pull request after CI passes."

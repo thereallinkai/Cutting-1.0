@@ -1,12 +1,16 @@
 # Let's Go Green!
 
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/thereallinkai/Cutting-1.0?quickstart=1)
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/thereallinkai/Lets-Go-Green?quickstart=1)
 
 Let's Go Green! is a calm, safety-aware meal-planning and habit-tracking application. It combines meal guidance, daily meal check-ins, weight-trend tracking, and a versioned plan workflow without presenting estimates as medical facts or guaranteeing a body-weight outcome.
 
 The repository is a single full-stack TypeScript application built with Next.js App Router, React, Tailwind CSS, Supabase PostgreSQL and Auth, a deterministic mock AI provider, an optional server-only OpenAI provider, Vitest, React Testing Library, and Playwright.
 
 > **Wellness and safety:** Let's Go Green! provides general wellness information and is not medical advice. Individual needs can vary. Consult a qualified healthcare professional or registered dietitian when appropriate.
+
+The current testing build is **Let's Go Green! 1.0 Beta 1**
+(`1.0.0-beta.1`). See [VERSIONING.md](VERSIONING.md) for the release-number
+policy and [CHANGELOG.md](CHANGELOG.md) for user-visible changes.
 
 ## Current feature set
 
@@ -109,9 +113,17 @@ The recommended Codespaces machine has at least 4 CPU cores, 8 GB memory, and 32
 1. Select the badge above or use **Code → Codespaces → Create codespace**. A repository branch, feature branch, or pull-request branch can be opened in its own Codespace.
 2. Wait for the Dev Container `postCreateCommand`. It runs `npm run bootstrap`, which installs the exact lockfile and prepares the credential-free local stack.
 3. Run **Terminal → Run Task → Start Let's Go Green!**. The same action is available from the Command Palette as **Tasks: Run Task**.
-4. Open the privately forwarded **Let's Go Green!** port when VS Code prompts.
+4. Keep the start terminal running. When Next.js prints `✓ Ready`, open the
+   privately forwarded **Let's Go Green!** port in the external browser. The
+   committed port configuration uses HTTP between Codespaces and Next.js and
+   keeps the forwarded URL private.
 
 The application, Supabase API, PostgreSQL, Supabase Studio, and captured-email ports are private by default. Bootstrap derives the application origin and exact Supabase Auth callback from Codespaces runtime variables without embedding a GitHub domain literal. Use the Codespaces **Ports** panel to open Studio or captured email instead of copying a forwarded-domain pattern into configuration.
+
+The first `npm run doctor` may report that Next.js is not ready when the
+application has not been started yet; that result is expected. After
+`npm run dev:all` prints `✓ Ready`, run `npm run doctor` in a second terminal
+to verify the application without stopping the development server.
 
 Codespaces can be configured for prebuilds after the workflow is stable. Prebuilds must not start secret-dependent work or embed a key in the container image.
 
@@ -183,7 +195,7 @@ Exact-product lookup runs on the server. Add these values to the ignored `.env.l
 USDA_FDC_API_KEY=
 
 # Descriptive application identity sent to food-data providers.
-FOOD_LOOKUP_USER_AGENT=LetsGoGreen/0.1 (https://github.com/thereallinkai/Cutting-1.0)
+FOOD_LOOKUP_USER_AGENT=LetsGoGreen/1.0.0-beta.1 (https://github.com/thereallinkai/Lets-Go-Green)
 ```
 
 - `USDA_FDC_API_KEY` is optional for local development because non-production mode can use the USDA `DEMO_KEY`. That shared key is rate-limited and is not a production configuration. Obtain and secure a data.gov key before relying on USDA lookup in a deployed environment.
@@ -336,6 +348,11 @@ git push -u origin feature/short-description
 
 Then open a pull request on GitHub. A developer can open the repository, the feature branch, or the pull-request branch directly in Codespaces.
 
+The default branch is protected by the owner-only setup documented in
+[GITHUB_SETUP.md](GITHUB_SETUP.md). It requires this pull-request workflow,
+resolved review conversations, and the exact **Local mock-backed suite** check;
+it also blocks deletion and force-pushes.
+
 CI runs for every pull request and push to `main`. It uses Node 22, `npm ci`, fresh local Supabase, migrations, deterministic seed data, captured email, mock AI, generated-type drift detection, type checking, lint, Vitest, database/RLS tests, a production build, and Playwright. Cleanup stops Supabase even after failure. Superseded branch runs are cancelled.
 
 CI has only `contents: read`, uses no production secrets, and does not use `pull_request_target`; forked pull requests can run the same local mock suite safely. Failed Playwright diagnostics are retained briefly and should contain only test data.
@@ -454,6 +471,37 @@ npx --no-install playwright install --with-deps chromium
 ### The application health check fails
 
 Confirm that local services are healthy, then run `npm run dev:all` and inspect the terminal. `/api/health` intentionally returns only sanitized status; use server logs for local diagnosis and do not copy secret-bearing output into an issue.
+
+### Port 3000 opens as a download or does not show the application
+
+`✓ Ready` means Next.js is listening; no additional wait is required. Keep that
+terminal running, then use the Codespaces **Ports** panel:
+
+1. Locate the row labeled **Let's Go Green!** with port **3000**. Port 54321
+   is an API and port 54322 is PostgreSQL; neither is the application page.
+2. Right-click port 3000 and select **Change Port Protocol → HTTP**.
+3. Confirm **Port Visibility → Private**.
+4. Select the globe icon or **Open in Browser**. Do not type a local
+   `localhost:3000` URL into the browser on your own computer.
+
+An existing Codespace remembers its port protocol for its lifetime, so a stale
+setting can override a newly pulled `devcontainer.json`. If the download prompt
+continues, stop forwarding port 3000 from the **Ports** panel, add port 3000
+again, set it to HTTP and private, and reopen it. To apply the committed
+automatic port behavior, pull the latest commit and run
+**Codespaces: Rebuild Container** from the Command Palette; bootstrap is
+idempotent and does not intentionally reset the local database.
+
+From a second terminal, distinguish an application problem from a forwarding
+problem:
+
+```bash
+curl --fail --silent --show-error http://127.0.0.1:3000/api/health
+npm run doctor
+```
+
+If both succeed while the forwarded URL still downloads, Next.js is healthy
+and only the Codespaces port setting needs to be recreated.
 
 ### Verification email does not arrive
 
