@@ -1003,9 +1003,9 @@ where nutrition.food_id = safety.food_id
 -- Preserve the richer nutrient panels published for the five deterministic
 -- raw-vegetable SR Legacy records. Values are per 100 g from the exact FDC IDs
 -- already named on their food_nutrition rows; missing values are not inferred.
--- Keep the staging work inside one DO statement because the Supabase seed
--- runner may commit between top-level statements even when the file contains
--- BEGIN/COMMIT.
+-- Keep the staging work inside one DO statement because the pinned Supabase
+-- seed runner queues and prepares top-level statements before executing
+-- schema-mutating statements.
 do $lets_go_green_vegetable_seed$
 begin
 create temporary table lets_go_green_seed_vegetable_nutrition (
