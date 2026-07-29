@@ -1003,6 +1003,11 @@ where nutrition.food_id = safety.food_id
 -- Preserve the richer nutrient panels published for the five deterministic
 -- raw-vegetable SR Legacy records. Values are per 100 g from the exact FDC IDs
 -- already named on their food_nutrition rows; missing values are not inferred.
+-- Keep the staging work inside one DO statement because the Supabase seed
+-- runner may commit between top-level statements even when the file contains
+-- BEGIN/COMMIT.
+do $lets_go_green_vegetable_seed$
+begin
 create temporary table lets_go_green_seed_vegetable_nutrition (
   nutrition_id uuid primary key,
   energy_kj numeric,
@@ -1015,7 +1020,7 @@ create temporary table lets_go_green_seed_vegetable_nutrition (
   iron_mg numeric,
   vitamin_d_mcg numeric,
   additional_nutrients jsonb not null
-) on commit drop;
+);
 
 insert into lets_go_green_seed_vegetable_nutrition
 values
@@ -1096,5 +1101,9 @@ set
   unit = excluded.unit,
   daily_value_percent = excluded.daily_value_percent,
   display_order = excluded.display_order;
+
+drop table lets_go_green_seed_vegetable_nutrition;
+end;
+$lets_go_green_vegetable_seed$;
 
 commit;
