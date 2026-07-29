@@ -45,7 +45,30 @@ jobs:
         run: npm install --global npm@10.9.8
 
       - name: Bootstrap exact dependencies and local services
-        run: npm run bootstrap
+        shell: bash
+        run: |
+          set -o pipefail
+          bootstrap_log="${RUNNER_TEMP}/lets-go-green-bootstrap.log"
+
+          if npm run bootstrap 2>&1 | tee "$bootstrap_log"; then
+            exit 0
+          fi
+
+          diagnostic="$(
+            tail -n 60 "$bootstrap_log" \
+              | sed -E \
+                  -e 's#postgres(ql)?://[^[:space:]]+#<redacted-local-database-url>#gI' \
+                  -e 's#eyJ[A-Za-z0-9._-]+#<redacted-local-token>#g' \
+                  -e 's#sb_(publishable|secret)_[A-Za-z0-9._-]+#<redacted-local-token>#g' \
+                  -e 's#([A-Z_]*(KEY|TOKEN|PASSWORD)[A-Z_]*[=:][[:space:]]*)[^[:space:]]+#\1<redacted>#gI' \
+              | tr '\r\n' '  '
+          )"
+          diagnostic="${diagnostic:0:3500}"
+          diagnostic="${diagnostic//'%'/'%25'}"
+
+          printf '::error title=Sanitized bootstrap diagnostic::%s\n' \
+            "$diagnostic"
+          exit 1
 
       - name: Check generated database type drift
         run: npm run db:types:check
