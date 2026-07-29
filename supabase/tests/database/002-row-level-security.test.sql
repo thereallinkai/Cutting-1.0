@@ -357,7 +357,7 @@ select is(
 );
 select is(
   (select count(*) from public.foods where ownership_type = 'catalog'),
-  28::bigint,
+  29::bigint,
   'an authenticated user can read the public catalog'
 );
 select is(

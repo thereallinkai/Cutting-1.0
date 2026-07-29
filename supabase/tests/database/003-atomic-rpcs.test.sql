@@ -494,7 +494,6 @@ select set_config(
   '{"role":"service_role"}',
   true
 );
-set local role service_role;
 
 insert into public.ai_generation_requests (
   id,
@@ -514,6 +513,8 @@ values (
   'lets-go-green-v2',
   'processing'
 );
+
+set local role service_role;
 
 select lives_ok(
   $$
@@ -687,7 +688,6 @@ select set_config(
   '{"role":"service_role"}',
   true
 );
-set local role service_role;
 
 insert into public.ai_generation_requests (
   id,
@@ -707,6 +707,8 @@ values (
   'lets-go-green-v2',
   'processing'
 );
+
+set local role service_role;
 
 select throws_ok(
   $$
@@ -750,8 +752,6 @@ select is(
   'an allergen rejection does not falsely complete the generation request'
 );
 
-set local role service_role;
-
 insert into public.ai_generation_requests (
   id,
   user_id,
@@ -771,6 +771,8 @@ values (
   'processing'
 );
 
+set local role service_role;
+
 select throws_ok(
   $$
     select public.save_plan_version(
@@ -785,7 +787,7 @@ select throws_ok(
     )
   $$,
   '22023',
-  'Every plan day must contain exactly three meals.',
+  'Every plan day must contain breakfast, lunch, and dinner.',
   'a plan day without a meals array is rejected'
 );
 
@@ -803,7 +805,7 @@ select throws_ok(
     )
   $$,
   '22023',
-  'Every plan meal must contain at least one item.',
+  'Every primary meal must contain at least one item.',
   'a plan meal without an items array is rejected'
 );
 
@@ -821,7 +823,7 @@ select throws_ok(
     )
   $$,
   '22023',
-  'The validated plan payload has an unsupported structure.',
+  'The validated plan payload must contain exactly seven days.',
   'a plan payload without schemaVersion and days is rejected'
 );
 
@@ -836,13 +838,6 @@ select is(
   1::bigint,
   'a rejected plan never leaves a partial version'
 );
-
-select set_config(
-  'request.jwt.claims',
-  '{"role":"service_role"}',
-  true
-);
-set local role service_role;
 
 select throws_ok(
   $$
@@ -931,6 +926,8 @@ values (
   'processing'
 );
 
+set local role service_role;
+
 select throws_ok(
   $$
     select public.save_plan_version(
@@ -961,6 +958,8 @@ select is(
   'basis rejection leaves the generation request incomplete and retryable'
 );
 
+reset role;
+
 insert into public.ai_generation_requests (
   id,
   user_id,
@@ -983,6 +982,8 @@ values (
   now() - interval '6 minutes',
   now() - interval '6 minutes'
 );
+
+set local role service_role;
 
 select ok(
   (
@@ -1082,6 +1083,8 @@ select is(
   'the fourth new request inside the rate window is rejected atomically'
 );
 
+reset role;
+
 insert into public.food_label_submissions (
   id,
   user_id,
@@ -1108,6 +1111,8 @@ values (
   }'::jsonb
 );
 
+set local role service_role;
+
 select is(
   (
     select allowed
@@ -1120,6 +1125,8 @@ select is(
   true,
   'the trusted server can reserve an editable label-image upload'
 );
+
+reset role;
 
 insert into public.foods (
   id,
@@ -1171,6 +1178,8 @@ values (
   'Normalized account-confirmed package label.',
   repeat('b', 64)
 );
+
+set local role service_role;
 
 select throws_ok(
   $$
