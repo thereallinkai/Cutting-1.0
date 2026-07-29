@@ -116,7 +116,7 @@ export async function POST(request: Request) {
 
   const mode = providerMode === "openai" ? "openai" : "mock";
   const provider = createPlanProvider(mode);
-  const reserveGeneration = admin.rpc as unknown as (
+  const reserveGeneration = admin.rpc.bind(admin) as unknown as (
     name: string,
     args: Record<string, unknown>,
   ) => Promise<{
@@ -230,7 +230,7 @@ export async function POST(request: Request) {
 
     const foodIds = [...new Set((preferencesResult.data ?? []).map((item) => item.food_id))];
     if (foodIds.length < 3) throw new Error("insufficient_eligible_foods");
-    const eligibilityRpc = supabase.rpc as unknown as (
+    const eligibilityRpc = supabase.rpc.bind(supabase) as unknown as (
       name: string,
       args: Record<string, unknown>,
     ) => Promise<{

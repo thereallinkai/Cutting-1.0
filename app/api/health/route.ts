@@ -7,7 +7,7 @@ import {
 import { createSupabaseAdminClient } from "@/src/lib/supabase/admin";
 
 const EXPECTED_MIGRATION =
-  "20260729020000_fix_catalog_rls_and_checkin_enum";
+  "20260729030000_complete_onboarding_from_slugs";
 
 export async function GET() {
   let database: "reachable" | "unavailable" | "not_configured" = "not_configured";

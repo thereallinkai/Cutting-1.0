@@ -154,6 +154,15 @@ function completionFailure(
         "Log in again to finish onboarding. Your information is still saved in this browser.",
     };
   }
+  if (code === "ONBOARDING_DATABASE_OUTDATED") {
+    return {
+      field: "service",
+      heading: "The local database needs to finish updating.",
+      message:
+        serverMessage
+        ?? "Restart with npm run dev:all so the local database update can finish, then try again.",
+    };
+  }
   if (
     code === "FOOD_SELECTION_CHANGED" ||
     code === "FOOD_NOT_PLAN_ELIGIBLE" ||

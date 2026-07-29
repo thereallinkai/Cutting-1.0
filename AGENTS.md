@@ -30,7 +30,8 @@ Write all source code, filenames, database identifiers, migrations, seed content
 
 - `npm run bootstrap` installs the lockfile, starts or reuses local Supabase, applies pending migrations and the idempotent seed, generates `.env.local` without replacing existing values, generates database types, installs Chromium, and performs health checks.
 - `npm run services:start` starts or reuses local Supabase and waits on a health endpoint.
-- `npm run dev:all` starts local services and Next.js. The VS Code task `Start Let's Go Green!` runs this command.
+- `npm run db:sync` applies pending migrations and the idempotent catalog seed without resetting local data.
+- `npm run dev:all` starts local services, safely synchronizes the database, and starts Next.js. The VS Code task `Start Let's Go Green!` runs this command.
 - `npm run doctor` diagnoses the runtime, Docker, Supabase, database, migration, port, configuration, application, and Playwright state.
 - `npm run down` stops local Supabase while preserving its development data.
 - `npm run db:reset` is destructive to local data. Run it only when the user explicitly intends to reconstruct a disposable local database.

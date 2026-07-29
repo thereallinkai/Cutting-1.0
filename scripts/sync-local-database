@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
+source "$ROOT_DIR/scripts/supabase-runtime-env"
+
+fail() {
+  printf 'ERROR: %s\n' "$*" >&2
+  exit 1
+}
+
+status_value() {
+  local key="$1"
+  local line
+  line="$(printf '%s\n' "$SUPABASE_STATUS" | awk -F= -v key="$key" '$1 == key { print; exit }')"
+  line="${line#*=}"
+  line="${line#\"}"
+  line="${line%\"}"
+  printf '%s' "$line"
+}
+
+[[ -x node_modules/.bin/supabase ]] \
+  || fail "The project-local Supabase CLI is missing. Run 'npm run bootstrap' first."
+command -v psql >/dev/null 2>&1 \
+  || fail "psql is unavailable. Rebuild the Dev Container."
+[[ -f supabase/seed.sql ]] \
+  || fail "supabase/seed.sql is missing. Restore the deterministic seed."
+
+SUPABASE_STATUS="$(npx --no-install supabase status -o env)" \
+  || fail "Local Supabase is not running. Run 'npm run services:start'."
+DATABASE_URL_VALUE="$(status_value DB_URL)"
+[[ -n "$DATABASE_URL_VALUE" ]] \
+  || fail "Supabase did not report a local DB_URL."
+
+printf 'Applying pending migrations without resetting local data...\n'
+npx --no-install supabase migration up --local
+
+printf 'Synchronizing deterministic catalog data...\n'
+psql "$DATABASE_URL_VALUE" \
+  --set ON_ERROR_STOP=1 \
+  --file supabase/seed.sql \
+  >/dev/null
+
+printf 'Local database schema and catalog are current.\n'

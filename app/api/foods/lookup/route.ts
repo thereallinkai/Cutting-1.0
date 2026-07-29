@@ -8,6 +8,7 @@ import {
 import {
   loadOpenFoodFactsProduct,
   loadUsdaFood,
+  searchOpenFoodFactsProducts,
   searchUsdaFoods,
 } from "@/src/lib/external";
 import { createSupabaseAdminClient } from "@/src/lib/supabase/admin";
@@ -16,6 +17,10 @@ import { createSupabaseServerClient } from "@/src/lib/supabase/server";
 const requestSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("search_usda"),
+    query: z.string().trim().min(2).max(120),
+  }),
+  z.object({
+    action: z.literal("search_open_food_facts"),
     query: z.string().trim().min(2).max(120),
   }),
   z.object({
@@ -55,7 +60,7 @@ function providerError(error: unknown) {
 
 async function cacheFood(food: NormalizedExternalFood) {
   const admin = createSupabaseAdminClient();
-  const cache = admin.rpc as unknown as (
+  const cache = admin.rpc.bind(admin) as unknown as (
     name: string,
     args: Record<string, unknown>,
   ) => Promise<RpcResult>;
@@ -85,7 +90,7 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return apiError(
       "INVALID_EXTERNAL_LOOKUP",
-      "Choose a USDA search result or enter an 8- to 14-digit barcode.",
+      "Search by a food or product name, choose a provider result, or enter an 8- to 14-digit barcode.",
       422,
     );
   }
@@ -111,11 +116,12 @@ export async function POST(request: Request) {
     const admin = createSupabaseAdminClient();
     const requestedProvider =
       parsed.data.action === "lookup_barcode" ||
+      parsed.data.action === "search_open_food_facts" ||
       (parsed.data.action === "import" &&
         parsed.data.provider === "open_food_facts")
         ? "open_food_facts"
         : "usda_fdc";
-    const recordLookup = admin.rpc as unknown as (
+    const recordLookup = admin.rpc.bind(admin) as unknown as (
       name: string,
       args: Record<string, unknown>,
     ) => Promise<RpcResult>;
@@ -147,7 +153,7 @@ export async function POST(request: Request) {
       if (!usdaApiKey) {
         return apiError(
           "USDA_LOOKUP_NOT_CONFIGURED",
-          "USDA lookup is not configured. Use a barcode or upload the label.",
+          "USDA lookup is not configured. Search the same name with Open Food Facts or upload the package label.",
           503,
         );
       }
@@ -155,6 +161,14 @@ export async function POST(request: Request) {
         ...providerOptions,
         apiKey: usdaApiKey,
       });
+      return apiSuccess({ kind: "candidates" as const, candidates });
+    }
+
+    if (parsed.data.action === "search_open_food_facts") {
+      const candidates = await searchOpenFoodFactsProducts(
+        parsed.data.query,
+        providerOptions,
+      );
       return apiSuccess({ kind: "candidates" as const, candidates });
     }
 

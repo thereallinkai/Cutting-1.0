@@ -1,0 +1,268 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const routeState = vi.hoisted(() => ({
+  rpc: vi.fn(),
+  searchOpenFoodFactsProducts: vi.fn(),
+  searchUsdaFoods: vi.fn(),
+  loadOpenFoodFactsProduct: vi.fn(),
+  loadUsdaFood: vi.fn(),
+}));
+
+vi.mock("server-only", () => ({}));
+
+vi.mock("@/src/lib/env", () => ({
+  getServerEnv: () => ({
+    FOOD_LOOKUP_USER_AGENT: "LetsGoGreen tests@example.invalid",
+    USDA_FDC_API_KEY: "fixture-key",
+  }),
+  isDevelopmentDemo: () => false,
+}));
+
+vi.mock("@/src/lib/external", () => ({
+  ExternalFoodError: class ExternalFoodError extends Error {
+    constructor(
+      readonly code: string,
+      message: string,
+    ) {
+      super(message);
+    }
+  },
+  searchOpenFoodFactsProducts: routeState.searchOpenFoodFactsProducts,
+  searchUsdaFoods: routeState.searchUsdaFoods,
+  loadOpenFoodFactsProduct: routeState.loadOpenFoodFactsProduct,
+  loadUsdaFood: routeState.loadUsdaFood,
+}));
+
+vi.mock("@/src/lib/supabase/server", () => ({
+  createSupabaseServerClient: async () => ({
+    auth: {
+      getUser: async () => ({
+        data: { user: { id: "11111111-1111-4111-8111-111111111111" } },
+        error: null,
+      }),
+    },
+  }),
+}));
+
+vi.mock("@/src/lib/supabase/admin", () => ({
+  createSupabaseAdminClient: () => {
+    const builder = {
+      select: vi.fn(),
+      eq: vi.fn(),
+      single: vi.fn(async () => ({
+        data: {
+          id: "22222222-2222-4222-8222-222222222222",
+          slug: "optimum-nutrition-whey",
+          english_name: "Optimum Nutrition — Gold Standard Whey",
+          catalog_status: "pending_review",
+        },
+        error: null,
+      })),
+    };
+    builder.select.mockReturnValue(builder);
+    builder.eq.mockReturnValue(builder);
+    return {
+      clientKind: "admin",
+      rpc(
+        this: { clientKind: string },
+        name: string,
+        args: Record<string, unknown>,
+      ) {
+        if (this.clientKind !== "admin") {
+          throw new Error("Supabase RPC lost its client context.");
+        }
+        return routeState.rpc(name, args);
+      },
+      from: vi.fn(() => builder),
+    };
+  },
+}));
+
+import { POST } from "../../app/api/foods/lookup/route";
+
+const offCandidate = {
+  provider: "open_food_facts" as const,
+  externalId: "748927022650",
+  displayName:
+    "Optimum Nutrition — Gold Standard 100% Whey Double Rich Chocolate",
+  brandName: "Optimum Nutrition",
+  productName: "Gold Standard 100% Whey Double Rich Chocolate",
+  variantName: null,
+  gtin: "748927022650",
+  dataType: "Open Food Facts product",
+  nutritionPreview: {
+    calories: 375,
+    proteinGrams: 75,
+    carbohydrateGrams: 9.4,
+    fatGrams: 3.1,
+  },
+};
+
+const normalizedOffFood = {
+  provider: "open_food_facts" as const,
+  externalId: "748927022650",
+  food: {
+    slug: "gold-standard-whey-off-748927022650",
+    english_name: "Optimum Nutrition — Gold Standard Whey",
+    food_kind: "branded_product" as const,
+    brand_name: "Optimum Nutrition",
+    product_name: "Gold Standard Whey",
+    variant_name: null,
+    manufacturer_name: null,
+    gtin: "748927022650",
+    package_description: "2 lb",
+    country_codes: [],
+    ingredients_text: "Whey protein",
+    allergen_statement: "Milk",
+    category_slugs: ["protein", "supplement"],
+  },
+  nutrition: {
+    measurement_basis: "as_sold" as const,
+    reference_quantity: 100,
+    reference_unit: "g" as const,
+    serving_weight_grams: null,
+    serving_description: "31 g",
+    calories: 375,
+    energy_kj: null,
+    protein_g: 75,
+    carbohydrate_g: 9.4,
+    fat_g: 3.1,
+    fiber_g: null,
+    sodium_mg: null,
+    saturated_fat_g: null,
+    trans_fat_g: null,
+    total_sugars_g: null,
+    added_sugars_g: null,
+    cholesterol_mg: null,
+    potassium_mg: null,
+    calcium_mg: null,
+    iron_mg: null,
+    vitamin_d_mcg: null,
+    nutrients: [],
+  },
+  sourceMetadata: {
+    source_name: "Open Food Facts",
+    source_reference: "Open Food Facts barcode 748927022650",
+    source_url: "https://world.openfoodfacts.org/product/748927022650",
+    source_version: "Open Food Facts product API v3",
+    license_code: "ODbL-1.0",
+    attribution_text: "Product data from Open Food Facts.",
+    source_modified_at: null,
+    parser_version: "test",
+    payload_sha256: "a".repeat(64),
+  },
+  snapshot: { product: { code: "748927022650" } },
+};
+
+describe("external food lookup route", () => {
+  beforeEach(() => {
+    routeState.rpc.mockReset();
+    routeState.searchOpenFoodFactsProducts.mockReset();
+    routeState.searchUsdaFoods.mockReset();
+    routeState.loadOpenFoodFactsProduct.mockReset();
+    routeState.loadUsdaFood.mockReset();
+    routeState.rpc.mockImplementation(async (name: string) => {
+      if (name === "record_external_food_lookup") {
+        return { data: true, error: null };
+      }
+      if (name === "cache_external_food") {
+        return {
+          data: "22222222-2222-4222-8222-222222222222",
+          error: null,
+        };
+      }
+      return { data: null, error: { code: "unexpected_rpc" } };
+    });
+  });
+
+  it("runs branded-product name search only after an explicit API request", async () => {
+    routeState.searchOpenFoodFactsProducts.mockResolvedValue([offCandidate]);
+
+    const response = await POST(
+      new Request("http://localhost/api/foods/lookup", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "search_open_food_facts",
+          query: "Optimum Nutrition double rich chocolate",
+        }),
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.data).toMatchObject({
+      kind: "candidates",
+      candidates: [offCandidate],
+    });
+    expect(routeState.searchOpenFoodFactsProducts).toHaveBeenCalledWith(
+      "Optimum Nutrition double rich chocolate",
+      expect.objectContaining({
+        userAgent: "LetsGoGreen tests@example.invalid",
+      }),
+    );
+    expect(routeState.rpc).toHaveBeenCalledWith(
+      "record_external_food_lookup",
+      expect.objectContaining({ lookup_provider: "open_food_facts" }),
+    );
+    expect(routeState.loadOpenFoodFactsProduct).not.toHaveBeenCalled();
+  });
+
+  it("stops name search when server-side lookup accounting rejects the request", async () => {
+    routeState.rpc.mockResolvedValueOnce({ data: false, error: null });
+
+    const response = await POST(
+      new Request("http://localhost/api/foods/lookup", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "search_open_food_facts",
+          query: "chocolate whey protein",
+        }),
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(429);
+    expect(body.error.code).toBe("FOOD_LOOKUP_RATE_LIMITED");
+    expect(routeState.searchOpenFoodFactsProducts).not.toHaveBeenCalled();
+  });
+
+  it("refetches an exact Open Food Facts record before caching an import", async () => {
+    routeState.loadOpenFoodFactsProduct.mockResolvedValue(normalizedOffFood);
+
+    const response = await POST(
+      new Request("http://localhost/api/foods/lookup", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "import",
+          provider: "open_food_facts",
+          externalId: "748927022650",
+        }),
+      }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(routeState.loadOpenFoodFactsProduct).toHaveBeenCalledWith(
+      "748927022650",
+      expect.objectContaining({
+        userAgent: "LetsGoGreen tests@example.invalid",
+      }),
+    );
+    expect(routeState.rpc).toHaveBeenCalledWith(
+      "cache_external_food",
+      expect.objectContaining({
+        source_provider: "open_food_facts",
+        source_external_id: "748927022650",
+        source_snapshot: normalizedOffFood.snapshot,
+      }),
+    );
+    expect(body.data).toMatchObject({
+      kind: "imported",
+      reviewStatus: "pending_review",
+      planEligible: false,
+    });
+  });
+});

@@ -69,7 +69,7 @@ export async function GET(request: Request) {
       return apiError("SESSION_EXPIRED", "Log in to view the food catalog.", 401);
     }
 
-    const callSearch = supabase.rpc as unknown as (
+    const callSearch = supabase.rpc.bind(supabase) as unknown as (
       name: string,
       args: Record<string, unknown>,
     ) => Promise<RpcResult>;

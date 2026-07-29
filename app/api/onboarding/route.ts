@@ -70,15 +70,25 @@ const completionSchema = draftSchema.extend({
   completed: z.literal(true),
 });
 
-type CompleteOnboardingArgs =
-  Database["public"]["Functions"]["complete_onboarding"]["Args"];
-type NullableCompleteOnboardingArgs = Omit<
-  CompleteOnboardingArgs,
+type CompleteOnboardingFromSlugsArgs =
+  Database["public"]["Functions"]["complete_onboarding_from_slugs"]["Args"];
+type NullableCompleteOnboardingFromSlugsArgs = Omit<
+  CompleteOnboardingFromSlugsArgs,
   "profile_height_cm" | "profile_notes" | "profile_safety_context"
 > & {
   profile_height_cm: number | null;
   profile_notes: string | null;
   profile_safety_context: string | null;
+};
+
+type OnboardingRpcError = {
+  code?: string;
+  message?: string;
+};
+
+type OnboardingRpcResult = {
+  data: string | null;
+  error: OnboardingRpcError | null;
 };
 
 function toJson(value: unknown): Json {
@@ -96,6 +106,28 @@ async function requireUser() {
   const supabase = await createSupabaseServerClient();
   const { data } = await supabase.auth.getUser();
   return { supabase, user: data.user };
+}
+
+async function completeOnboardingWithRetry(
+  rpc: (
+    name: string,
+    args: CompleteOnboardingFromSlugsArgs,
+  ) => Promise<OnboardingRpcResult>,
+  args: CompleteOnboardingFromSlugsArgs,
+) {
+  const invoke = () => rpc("complete_onboarding_from_slugs", args);
+  try {
+    const firstResult = await invoke();
+    if (!/^PGRST00[0-2]$/.test(firstResult.error?.code ?? "")) {
+      return firstResult;
+    }
+    console.warn("complete_onboarding RPC connection retry", {
+      code: firstResult.error?.code,
+    });
+  } catch {
+    console.warn("complete_onboarding RPC transport retry");
+  }
+  return invoke();
 }
 
 export async function GET() {
@@ -178,56 +210,10 @@ export async function PUT(request: Request) {
   if (isDevelopmentDemo()) return apiSuccess({ completed: true, goalId: "demo-goal" });
 
   try {
-    const { supabase, user } = await requireUser();
-    if (!user) return apiError("SESSION_EXPIRED", "Log in to complete onboarding.", 401);
-
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("age,gender")
-      .eq("user_id", user.id)
-      .single();
-    if (
-      profileError
-      || !profile
-      || profile.gender === null
-      || profile.age === null
-    ) {
-      return apiError("PROFILE_REQUIRED", "Complete the account profile before onboarding.", 409);
-    }
-
-    const allSlugs = [...new Set(Object.values(parsed.data.meals).flat())];
-    const { data: catalog, error: foodError } = await supabase
-      .from("foods")
-      .select("id,slug")
-      .in("slug", allSlugs);
-    if (foodError || (catalog?.length ?? 0) !== allSlugs.length) {
-      return apiError("FOOD_SELECTION_CHANGED", "One or more selected foods are no longer available.", 409);
-    }
-    const planEligibility = supabase.rpc as unknown as (
-      name: string,
-      args: Record<string, unknown>,
-    ) => Promise<{
-      data: Array<{ food_id: string }> | null;
-      error: { code?: string } | null;
-    }>;
-    const eligibilityResult = await planEligibility("plan_eligible_food_ids", {
-      candidate_food_ids: catalog!.map((food) => food.id),
-    });
-    if (
-      eligibilityResult.error ||
-      (eligibilityResult.data?.length ?? 0) !== catalog!.length
-    ) {
-      return apiError(
-        "FOOD_NOT_PLAN_ELIGIBLE",
-        "One or more foods are still pending source or safety review. Choose reviewed foods or confirm your own package label.",
-        409,
-      );
-    }
-    const foodIds = new Map(catalog!.map((food) => [food.slug, food.id]));
     const preferences = (["breakfast", "lunch", "dinner"] as const).flatMap((mealType) =>
       parsed.data.meals[mealType].map((slug, sortOrder) => ({
         mealType,
-        foodId: foodIds.get(slug)!,
+        foodSlug: slug,
         sortOrder,
       })),
     );
@@ -278,8 +264,6 @@ export async function PUT(request: Request) {
     }
 
     const completeOnboardingArgs = {
-      profile_gender_value: profile.gender,
-      profile_age: profile.age,
       profile_height_cm: parsedHeight.heightCm,
       profile_weight_unit: parsed.data.unit,
       profile_time_zone: parsed.data.timeZone,
@@ -295,28 +279,81 @@ export async function PUT(request: Request) {
       target_weight_kg: targetWeight.weightKg,
       plan_start_date: planStartDate,
       target_date: parsed.data.targetDate,
-      preferences: toJson(preferences),
+      preference_slugs: toJson(preferences),
       acknowledged_warnings: toJson(parsed.data.acknowledgedWarnings),
-    } satisfies NullableCompleteOnboardingArgs;
+    } satisfies NullableCompleteOnboardingFromSlugsArgs;
 
     // PostgreSQL accepts NULL for these nullable parameters. Supabase CLI
     // 2.109.1 omits those null unions from its generated RPC argument type.
-    const { data: goalId, error } = await supabase.rpc(
-      "complete_onboarding",
-      completeOnboardingArgs as CompleteOnboardingArgs,
+    const supabase = await createSupabaseServerClient();
+    const rpc = supabase.rpc.bind(supabase) as unknown as (
+      name: string,
+      args: CompleteOnboardingFromSlugsArgs,
+    ) => Promise<OnboardingRpcResult>;
+    const { data: goalId, error } = await completeOnboardingWithRetry(
+      rpc,
+      completeOnboardingArgs as CompleteOnboardingFromSlugsArgs,
     );
     if (error) {
-      console.error("complete_onboarding RPC failed", {
+      console.error("complete_onboarding_from_slugs RPC failed", {
         code: error.code,
       });
+      if (error.code === "42501") {
+        if (error.message?.includes("Email verification")) {
+          return apiError(
+            "EMAIL_VERIFICATION_REQUIRED",
+            "Verify your email before completing onboarding.",
+            409,
+          );
+        }
+        return apiError(
+          "SESSION_EXPIRED",
+          "Log in again to complete onboarding. Your information is still saved in this browser.",
+          401,
+        );
+      }
+      if (error.code === "PGRST202" || error.code === "42883") {
+        return apiError(
+          "ONBOARDING_DATABASE_OUTDATED",
+          "Restart with npm run dev:all so the local database update can finish, then try again.",
+          503,
+        );
+      }
       if (
         error.code === "23514"
-        && error.message.includes("Terms and privacy acceptance")
+        && error.message?.includes("Terms and privacy acceptance")
       ) {
         return apiError(
           "LEGAL_ACCEPTANCE_REQUIRED",
           "Your Terms and Privacy acceptance could not be verified. Sign in again or recreate this test account.",
           409,
+        );
+      }
+      if (
+        error.code === "23514"
+        && error.message?.includes("account profile")
+      ) {
+        return apiError(
+          "PROFILE_REQUIRED",
+          "Complete the account profile before onboarding.",
+          409,
+        );
+      }
+      if (
+        error.code === "23514"
+        && error.message?.includes("selected food")
+      ) {
+        return apiError(
+          "FOOD_SELECTION_CHANGED",
+          "One or more meal selections changed or still need source and safety review. Review the foods and try again.",
+          409,
+        );
+      }
+      if (error.code === "22023") {
+        return apiError(
+          "INVALID_ONBOARDING",
+          "Review the meal preferences and required profile details.",
+          422,
         );
       }
       if (error.code === "23505") {
@@ -330,6 +367,7 @@ export async function PUT(request: Request) {
     }
     return apiSuccess({ completed: true, goalId });
   } catch {
+    console.error("complete_onboarding transport unavailable");
     return apiError("SERVICE_UNAVAILABLE", "Onboarding services are temporarily unavailable.", 503);
   }
 }

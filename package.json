@@ -12,6 +12,7 @@
     "doctor": "./scripts/doctor",
     "bootstrap": "./scripts/bootstrap",
     "services:start": "./scripts/services-start",
+    "db:sync": "./scripts/sync-local-database",
     "dev": "next dev --hostname 0.0.0.0",
     "dev:all": "./scripts/dev",
     "test": "vitest run",

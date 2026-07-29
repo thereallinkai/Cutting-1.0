@@ -27,6 +27,14 @@ function text(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function firstText(...values: unknown[]): string | null {
+  for (const value of values) {
+    const candidate = text(value);
+    if (candidate) return candidate;
+  }
+  return null;
+}
+
 function stringArray(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === "string")
@@ -109,9 +117,14 @@ export function openFoodFactsCandidateFromProduct(
 ): ExternalFoodCandidate {
   const product = record(rawProduct);
   const productName =
-    text(product.product_name_en ?? product.product_name ?? product.generic_name_en) ??
+    firstText(
+      product.product_name_en,
+      product.product_name,
+      product.generic_name_en,
+      product.generic_name,
+    ) ??
     "Unnamed packaged food";
-  const brandName = text(product.brands ?? product.brand_owner);
+  const brandName = firstText(product.brands, product.brand_owner);
   const nutriments = record(product.nutriments);
   return {
     provider: "open_food_facts",
@@ -134,6 +147,64 @@ export function openFoodFactsCandidateFromProduct(
       fatGrams: nutrient(nutriments, "fat"),
     },
   };
+}
+
+export async function searchOpenFoodFactsProducts(
+  query: string,
+  options: {
+    userAgent: string;
+    fetcher?: typeof fetch;
+  },
+): Promise<ExternalFoodCandidate[]> {
+  const normalizedQuery = query.trim().replace(/\s+/g, " ");
+  if (normalizedQuery.length < 2 || normalizedQuery.length > 120) {
+    throw new ExternalFoodError(
+      "not_found",
+      "Enter between 2 and 120 characters to search packaged products.",
+    );
+  }
+
+  // Open Food Facts documents full-text search through its legacy CGI search
+  // route. Keep this request explicit (never search-as-you-type), small, and
+  // field-limited because the provider rate-limits search traffic.
+  const url = new URL("https://world.openfoodfacts.org/cgi/search.pl");
+  url.searchParams.set("search_terms", normalizedQuery);
+  url.searchParams.set("search_simple", "1");
+  url.searchParams.set("action", "process");
+  url.searchParams.set("json", "1");
+  url.searchParams.set("page", "1");
+  url.searchParams.set("page_size", "10");
+  url.searchParams.set(
+    "fields",
+    [
+      "code",
+      "product_name",
+      "product_name_en",
+      "generic_name",
+      "generic_name_en",
+      "brands",
+      "brand_owner",
+      "quantity",
+      "nutriments",
+    ].join(","),
+  );
+
+  const payload = await fetchProviderJson(url, options);
+  const products = Array.isArray(payload.products) ? payload.products : [];
+  const seenBarcodes = new Set<string>();
+  return products.flatMap((raw): ExternalFoodCandidate[] => {
+    const product = record(raw);
+    const barcode = digitsOnly(product.code);
+    const productName = firstText(
+      product.product_name_en,
+      product.product_name,
+      product.generic_name_en,
+      product.generic_name,
+    );
+    if (!barcode || !productName || seenBarcodes.has(barcode)) return [];
+    seenBarcodes.add(barcode);
+    return [openFoodFactsCandidateFromProduct(barcode, product)];
+  });
 }
 
 export async function loadOpenFoodFactsProduct(
@@ -217,8 +288,9 @@ export async function loadOpenFoodFactsProduct(
       country_codes: stringArray(product.countries_tags)
         .map((country) => country.replace(/^[a-z]{2}:/, ""))
         .slice(0, 40),
-      ingredients_text: text(
-        product.ingredients_text_en ?? product.ingredients_text,
+      ingredients_text: firstText(
+        product.ingredients_text_en,
+        product.ingredients_text,
       ),
       allergen_statement: allergenStatement,
       category_slugs: categorySlugs,

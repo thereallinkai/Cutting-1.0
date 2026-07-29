@@ -132,11 +132,7 @@ fi
 [[ -f supabase/seed.sql ]] \
   || fail "supabase/seed.sql is missing. Restore the version-controlled deterministic seed before bootstrapping."
 
-printf 'Applying pending version-controlled migrations without resetting data...\n'
-npx --no-install supabase migration up --local
-
-printf 'Applying the deterministic idempotent development seed...\n'
-psql "$DATABASE_URL_VALUE" --set ON_ERROR_STOP=1 --file supabase/seed.sql >/dev/null
+./scripts/sync-local-database
 
 if [[ ! -f .env.local ]]; then
   {

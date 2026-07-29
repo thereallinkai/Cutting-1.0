@@ -1327,6 +1327,28 @@ export type Database = {
         }
         Returns: string
       }
+      complete_onboarding_from_slugs: {
+        Args: {
+          acknowledged_warnings?: Json
+          current_weight_kg: number
+          plan_start_date: string
+          preference_slugs: Json
+          profile_activity_level: Database["public"]["Enums"]["activity_level"]
+          profile_allergies: string[]
+          profile_dietary_restrictions: string[]
+          profile_disliked_foods: string[]
+          profile_height_cm: number
+          profile_notes: string
+          profile_safety_context: string
+          profile_time_zone: string
+          profile_training_days: number
+          profile_weight_unit: Database["public"]["Enums"]["weight_unit"]
+          selected_goal_type: Database["public"]["Enums"]["goal_type"]
+          target_date: string
+          target_weight_kg: number
+        }
+        Returns: string
+      }
       create_confirmed_label_food: {
         Args: { label_data: Json; label_submission_id?: string }
         Returns: string

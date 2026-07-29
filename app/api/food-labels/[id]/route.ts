@@ -45,7 +45,7 @@ export async function POST(
     if (!auth.user) {
       return apiError("SESSION_EXPIRED", "Log in before confirming a label.", 401);
     }
-    const call = supabase.rpc as unknown as (
+    const call = supabase.rpc.bind(supabase) as unknown as (
       name: string,
       args: Record<string, unknown>,
     ) => Promise<RpcResult>;

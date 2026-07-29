@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import offFixture from "../fixtures/open-food-facts-product.json";
+import offSearchFixture from "../fixtures/open-food-facts-search.json";
 import usdaFixture from "../fixtures/usda-whey-product.json";
 
 vi.mock("server-only", () => ({}));
@@ -7,6 +8,7 @@ vi.mock("server-only", () => ({}));
 import {
   loadOpenFoodFactsProduct,
   loadUsdaFood,
+  searchOpenFoodFactsProducts,
 } from "../../src/lib/external";
 
 function fixtureFetch(payload: unknown) {
@@ -61,6 +63,40 @@ describe("external food normalization", () => {
     expect(result.sourceMetadata.source_version).toBe(
       "Open Food Facts product API v3",
     );
+  });
+
+  it("searches Open Food Facts by product name without importing a candidate", async () => {
+    const fetcher = fixtureFetch(offSearchFixture);
+    const candidates = await searchOpenFoodFactsProducts(
+      "Optimum Nutrition double rich chocolate",
+      {
+        userAgent: "LetsGoGreen tests@example.invalid",
+        fetcher,
+      },
+    );
+
+    const requestedUrl = new URL(
+      String(vi.mocked(fetcher).mock.calls[0]?.[0]),
+    );
+    expect(requestedUrl.pathname).toBe("/cgi/search.pl");
+    expect(requestedUrl.searchParams.get("search_terms")).toBe(
+      "Optimum Nutrition double rich chocolate",
+    );
+    expect(requestedUrl.searchParams.get("page_size")).toBe("10");
+    expect(requestedUrl.searchParams.get("fields")).toContain("nutriments");
+    expect(candidates[0]).toMatchObject({
+      provider: "open_food_facts",
+      externalId: "748927022650",
+      brandName: "Optimum Nutrition",
+      gtin: "748927022650",
+      nutritionPreview: {
+        calories: 375,
+        proteinGrams: 75,
+        carbohydrateGrams: 9.4,
+        fatGrams: 3.1,
+      },
+    });
+    expect(candidates[1]?.nutritionPreview.calories).toBeCloseTo(375, 0);
   });
 
   it("keeps USDA kilocalorie and kilojoule rows distinct", async () => {

@@ -66,7 +66,7 @@ test("protected mock pages have no serious or critical axe violations", async ({
   }
 });
 
-test("Today, Profile, and the tutorial reflow at required widths", async ({
+test("Today, Calendar, Profile, and the tutorial reflow at required widths", async ({
   page,
 }) => {
   for (const width of [375, 768, 1280, 1440]) {
@@ -77,6 +77,13 @@ test("Today, Profile, and the tutorial reflow at required widths", async ({
       page.getByRole("heading", { level: 1, name: "Good morning, Jamie." }),
     ).toBeVisible();
     await expectNoHorizontalOverflow(page, `Today at ${width}px`);
+
+    await page.goto("/calendar");
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Calendar" }),
+    ).toBeVisible();
+    await expect(page.locator(".calendar-card")).toBeVisible();
+    await expectNoHorizontalOverflow(page, `Calendar at ${width}px`);
 
     await page.goto("/profile");
     await expect(
@@ -95,6 +102,40 @@ test("Today, Profile, and the tutorial reflow at required widths", async ({
       .getByRole("button", { name: "Skip tutorial for now" })
       .click();
   }
+});
+
+test("reduced-motion preference removes nonessential page and control motion", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/today");
+
+  const motion = await page.evaluate(() => {
+    const pageTransition = document.querySelector(".page-transition");
+    const button = document.querySelector(".button");
+    if (
+      !(pageTransition instanceof HTMLElement) ||
+      !(button instanceof HTMLElement)
+    ) {
+      throw new Error("Motion test targets were not rendered.");
+    }
+
+    const pageStyle = getComputedStyle(pageTransition);
+    const buttonStyle = getComputedStyle(button);
+    return {
+      animationDuration: Number.parseFloat(pageStyle.animationDuration),
+      scrollBehavior: getComputedStyle(document.documentElement).scrollBehavior,
+      transitionDuration: Math.max(
+        ...buttonStyle.transitionDuration
+          .split(",")
+          .map((duration) => Number.parseFloat(duration)),
+      ),
+    };
+  });
+
+  expect(motion.animationDuration).toBeLessThan(0.001);
+  expect(motion.transitionDuration).toBeLessThan(0.001);
+  expect(motion.scrollBehavior).toBe("auto");
 });
 
 test("tutorial actions remain reachable in a short mobile viewport", async ({

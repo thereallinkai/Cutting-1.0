@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
 
-select plan(61);
+select plan(62);
 
 select has_table('public', 'profiles', 'profiles table exists');
 select has_table('public', 'legal_acceptances', 'legal_acceptances table exists');
@@ -339,6 +339,30 @@ select has_function(
     'jsonb'
   ],
   'the atomic onboarding-completion RPC exists'
+);
+select has_function(
+  'public',
+  'complete_onboarding_from_slugs',
+  array[
+    'numeric',
+    'weight_unit',
+    'text',
+    'activity_level',
+    'smallint',
+    'text[]',
+    'text[]',
+    'text[]',
+    'text',
+    'text',
+    'goal_type',
+    'numeric',
+    'numeric',
+    'date',
+    'date',
+    'jsonb',
+    'jsonb'
+  ],
+  'the atomic slug-resolving onboarding RPC exists'
 );
 select has_function(
   'public',

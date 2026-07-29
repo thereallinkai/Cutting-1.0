@@ -54,7 +54,7 @@ software directly on your computer.
     ```
 
     Restart `npm run dev:all` after changing environment values. Open Food Facts
-    barcode lookup needs outbound network access but no API key. If the
+    name and barcode lookup need outbound network access but no API key. If the
     environment blocks a provider, record that live-provider case as blocked,
     not passed; the local catalog and label-upload cases must still be tested.
 
@@ -298,11 +298,11 @@ source-reported data, not proof that the nutrition is correct.
 
 ### USDA FoodData Central text lookup
 
-1. Expand **Look up a larger external catalog**, put `broccoli raw` in the
-   catalog search, and choose **Search USDA**.
+1. Put `broccoli raw` in **Search foods**, choose
+   **Generic and branded foods — USDA**, and press **Search online by name**.
 2. Review several candidates before choosing one; in the Network response, note
    the candidate's FDC `externalId` and visible data type.
-3. Choose **Import exact record**, then search the local catalog for it.
+3. Choose **Import current record**, then search the local catalog for it.
 4. Import the same FDC identifier again.
 
 - [ ] A one-character query is rejected without calling the provider.
@@ -321,10 +321,35 @@ source-reported data, not proof that the nutrition is correct.
 - [ ] A missing key in production, provider timeout, bad response, or rate limit
   produces a useful unavailable/retry message and does not invent a result.
 
+### Open Food Facts product-name lookup
+
+1. Enter a brand, product, and flavor, such as
+   `Optimum Nutrition double rich chocolate`, in **Search foods**.
+2. Keep **Packaged products and brands — Open Food Facts** selected and press
+   **Search online by name**. A barcode is not required.
+3. Review the source, brand/product name, barcode when present, and the
+   source-reported calorie/macronutrient preview. Choose
+   **Import current record** only for the exact product you intend.
+4. Repeat the test while a saved local match is visible.
+
+- [ ] The online-name controls stay prominent even when the saved catalog has
+  matches.
+- [ ] Typing and local catalog filtering do not send a request to Open Food
+  Facts; only the explicit search button does.
+- [ ] Name search returns candidates without saving all of them.
+- [ ] Import sends only provider plus external ID and refetches the exact
+  barcode record from Open Food Facts before normalization; browser-supplied
+  nutrition cannot control the stored values.
+- [ ] Imported nutrition and provenance are labeled source-reported and
+  `pending_review`, and the record remains unavailable to generated plans until
+  catalog review.
+- [ ] Empty, one-character, unavailable, incomplete, and rate-limited searches
+  show useful messages and never invent nutrition.
+
 ### Open Food Facts barcode lookup
 
-1. Under **Exact product barcode**, use the 8–14 digit barcode from a
-   non-sensitive packaged test product.
+1. Expand **Look up an exact barcode instead** and use the 8–14 digit barcode
+   from a non-sensitive packaged test product.
 2. If the provider finds it, review the exact brand/product and nutrition, then
    import it and search the local catalog by that barcode.
 3. Also try seven digits, letters, an unknown 8–14 digit code, and a product

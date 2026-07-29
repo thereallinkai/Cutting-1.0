@@ -97,7 +97,7 @@ export async function POST(
     }
 
     const admin = createSupabaseAdminClient();
-    const reserveUpload = admin.rpc as unknown as (
+    const reserveUpload = admin.rpc.bind(admin) as unknown as (
       name: string,
       args: Record<string, unknown>,
     ) => Promise<{

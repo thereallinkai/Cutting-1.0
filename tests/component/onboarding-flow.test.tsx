@@ -524,6 +524,43 @@ describe("OnboardingFlow completion", () => {
     expect(router.push).not.toHaveBeenCalledWith("/plan");
   });
 
+  it("explains how to finish a pending local database update", async () => {
+    window.localStorage.setItem(
+      "lets-go-green-onboarding-draft",
+      JSON.stringify(completionDraft()),
+    );
+    mockCompletionRequests({
+      putResponse: jsonResponse(
+        {
+          data: null,
+          error: {
+            code: "ONBOARDING_DATABASE_OUTDATED",
+            message:
+              "Restart with npm run dev:all so the local database update can finish, then try again.",
+          },
+        },
+        503,
+      ),
+    });
+    const user = userEvent.setup();
+    render(<OnboardingFlow initialStep={6} />);
+
+    await screen.findByText("fat loss · 210 lb → 200 lb · 2026-08-31");
+    await user.click(
+      screen.getByRole("checkbox", {
+        name: "I have reviewed this information and want to complete onboarding.",
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "Go to Today" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(
+      "The local database needs to finish updating.",
+    );
+    expect(alert).toHaveTextContent("Restart with npm run dev:all");
+    expect(router.push).not.toHaveBeenCalledWith("/today");
+  });
+
   it("conveys an imperial height through successful Step 6 completion", async () => {
     window.localStorage.setItem(
       "lets-go-green-onboarding-draft",

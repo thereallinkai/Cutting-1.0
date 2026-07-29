@@ -4,16 +4,18 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/src/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-transparent px-5 py-3 text-sm font-bold transition-[transform,box-shadow,background-color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6e7f29] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-55 motion-safe:hover:-translate-y-px",
+  "inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-transparent px-5 py-3 text-sm font-bold transition-[transform,box-shadow,background-color,border-color,color,opacity] duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2f7d4e] focus-visible:ring-offset-2 focus-visible:ring-offset-[#fbfef9] disabled:pointer-events-none disabled:opacity-55 motion-safe:hover:-translate-y-px motion-safe:active:translate-y-0 motion-safe:active:scale-[0.98]",
   {
     variants: {
       variant: {
-        default: "ui-button-default bg-[#172523] text-white hover:shadow-lg",
-        accent: "bg-[#d9f174] text-[#172523] hover:bg-[#e2f68e]",
+        default:
+          "ui-button-default bg-[#123524] text-white shadow-[0_7px_20px_rgba(18,53,36,0.16)] hover:bg-[#194a32] hover:shadow-[0_10px_26px_rgba(18,53,36,0.2)]",
+        accent:
+          "bg-[#b8e36d] text-[#123524] shadow-[0_7px_20px_rgba(31,107,67,0.12)] hover:bg-[#c8ee82] hover:shadow-[0_10px_26px_rgba(31,107,67,0.17)]",
         outline:
-          "border-[#d9d4c8] bg-transparent text-[#172523] hover:bg-white/60",
+          "border-[#bfd4c2] bg-white/25 text-[#123524] hover:border-[#8bb897] hover:bg-white/70",
         danger:
-          "border-[#9b3d35]/35 bg-[#fff8f7] text-[#9b3d35]",
+          "border-[#9b3d35]/35 bg-[#fff8f7] text-[#9b3d35] hover:border-[#9b3d35]/55 hover:bg-[#fff2f0]",
       },
       size: {
         default: "min-h-12",

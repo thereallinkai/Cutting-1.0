@@ -17,7 +17,7 @@ The repository is structured to provide:
 - Resumable onboarding for profile, food preferences, goals, lifestyle, safety context, and review.
 - A searchable food catalog that distinguishes generic foods from exact brand, product, variant, and GTIN/barcode records.
 - Expandable nutrition facts with energy, macronutrients, available micronutrients, measurement basis, source attribution, and verification status.
-- Authenticated USDA FoodData Central text search and Open Food Facts barcode lookup, with server-side normalization and a pending-review boundary.
+- Authenticated, explicit online name search across USDA FoodData Central and Open Food Facts, plus exact Open Food Facts barcode lookup, with server-side normalization and a pending-review boundary.
 - Private, sanitized nutrition-label photo upload and exact transcription for a user-confirmed personal product; a GTIN can also create one reusable normalized catalog record without sharing the photo evidence.
 - Versioned seven-day plans with an accepted-plan boundary.
 - Six ordered daily spaces—breakfast, morning snack, lunch, afternoon snack, dinner, and evening snack—with extra-food recording and an explicit skipped state whose reason is optional.
@@ -58,7 +58,7 @@ flowchart LR
   N -->|Default local and CI mode| M
   N -. Explicit server-only opt-in .-> O
   N -->|Server-side text lookup| U
-  N -->|Server-side barcode lookup| X
+  N -->|Explicit name or barcode lookup| X
   B -. Clearly labeled external search .-> G
 ```
 
@@ -72,7 +72,7 @@ Deterministic code—not a language model—owns unit conversion, timeline math,
 | --- | --- | --- |
 | Reviewed local catalog | Generic foods or exact products, measurement basis, nutrition, safety metadata, and provenance | Eligible only when the required nutrition and safety records have the reviewed statuses enforced by the database |
 | USDA FoodData Central | Text-search candidates and a server-refetched normalized record | Labeled source-reported and `pending_review`; searchable and loggable, but not eligible for generated plans until reviewed |
-| Open Food Facts | An exact 8–14 digit barcode lookup and a server-refetched normalized product | Community-source data with attribution, labeled source-reported and `pending_review`; not eligible for generated plans until reviewed |
+| Open Food Facts | Explicit brand/product/flavor name-search candidates or an exact 8–14 digit barcode, followed by a server-refetched normalized product | Community-source data with attribution, labeled source-reported and `pending_review`; not eligible for generated plans until reviewed |
 | Uploaded package label | A server-re-encoded, owner-private JPEG/PNG plus the account owner's exact transcription | The original upload is not retained as-is; confirmation requires sanitized nutrition-label evidence and creates an active `user_label` personal product for that owner, not an independently reviewed record |
 | Label with a GTIN | A normalized shared catalog record keyed by the barcode | Reusable in catalog search and daily logging as `pending_review`; the private photo evidence and owner-private personal product are never published to other accounts |
 
@@ -154,7 +154,7 @@ No host installation of Node.js, npm packages, PostgreSQL, Supabase CLI, or Play
 
 Rerunning bootstrap does not reset the database, duplicate deterministic seed records, overwrite a user-provided key, or replace an existing `.env.local` value. It can update the generated database type file when migrations change.
 
-`npm run dev:all` is the one-action daily start command. It starts or reuses Supabase and then runs Next.js on port 3000. If the environment has never been prepared, it runs bootstrap first.
+`npm run dev:all` is the one-action daily start command. It starts or reuses Supabase, safely applies pending migrations and the idempotent catalog seed, and then runs Next.js on port 3000. If the environment has never been prepared, it runs bootstrap first. A normal restart after `git pull` therefore picks up database-backed features without deleting existing local accounts or onboarding drafts.
 
 ## Local services
 
@@ -188,8 +188,9 @@ FOOD_LOOKUP_USER_AGENT=LetsGoGreen/0.1 (https://github.com/thereallinkai/Cutting
 
 - `USDA_FDC_API_KEY` is optional for local development because non-production mode can use the USDA `DEMO_KEY`. That shared key is rate-limited and is not a production configuration. Obtain and secure a data.gov key before relying on USDA lookup in a deployed environment.
 - `FOOD_LOOKUP_USER_AGENT` is not a secret, but it must be a descriptive value of at least eight characters. The committed default identifies this repository.
-- Open Food Facts barcode lookup does not require a key. Both providers require outbound network access and can be unavailable, incomplete, or rate-limited.
-- Search results are candidates only. Import refetches the selected provider record on the server, stores provenance and a source snapshot, and marks the normalized record `pending_review`.
+- Open Food Facts name and barcode lookup do not require a key. Both providers require outbound network access and can be unavailable, incomplete, or rate-limited.
+- Online name lookup is user-triggered, not search-as-you-type. The server limits fields and result count because [Open Food Facts limits search requests and warns against search-as-you-type](https://openfoodfacts.github.io/documentation/docs/Product-Opener/api/).
+- Search results are candidates only. Import refetches the selected USDA record or exact Open Food Facts barcode record on the server, stores provenance and a source snapshot, and marks the normalized record `pending_review`.
 
 Provider configuration expands the catalog; it does not turn source-reported data into reviewed nutrition or make a pending record eligible for generated plans.
 
@@ -234,8 +235,9 @@ The endpoint does not expose keys, connection strings, internal tokens, raw prov
 | `npm run doctor` | Diagnose the complete running development environment. |
 | `npm run bootstrap` | Idempotently install dependencies and prepare local services, configuration, types, browsers, and health checks. |
 | `npm run services:start` | Start or reuse Supabase and wait until it is healthy. |
+| `npm run db:sync` | Apply pending migrations and the idempotent catalog seed without resetting local data. |
 | `npm run dev` | Start only Next.js; use this when services are already running. |
-| `npm run dev:all` | Start or prepare Supabase, then start Next.js. This powers the VS Code task. |
+| `npm run dev:all` | Start or prepare Supabase, safely synchronize its schema/catalog, then start Next.js. This powers the VS Code task. |
 | `npm run test` | Run the Vitest unit and component suite once. |
 | `npm run test:db` | Run schema, seed, constraint, atomic-RPC, and RLS checks against the running local Supabase database. |
 | `npm run test:e2e` | Run mock-backed Playwright end-to-end and accessibility tests. |

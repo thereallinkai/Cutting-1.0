@@ -26,9 +26,9 @@ export const PRODUCT_TOUR_STEPS: readonly ProductTourStep[] = [
     eyebrow: "Foods and products",
     title: "Choose the exact food you mean",
     description:
-      "Search the saved catalog first, then look up a USDA food or an exact packaged product by barcode. Open its nutrition facts before choosing it.",
+      "Search the saved catalog first, then search USDA or Open Food Facts by food, brand, product, or flavor. A barcode is optional.",
     detail:
-      "If a packaged product is missing, photograph its Nutrition Facts label and enter what the label says. The photo stays private; a reusable product record is shared only when a barcode identifies it.",
+      "Online search runs only when you press its button. Review the source and nutrition before importing; if a product is missing, photograph its label and enter exactly what it says.",
   },
   {
     eyebrow: "Today",

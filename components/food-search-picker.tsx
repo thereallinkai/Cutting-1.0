@@ -22,10 +22,13 @@ export type FoodPickerItem = {
 };
 
 type Candidate = {
-  provider: "usda_fdc";
+  provider: "usda_fdc" | "open_food_facts";
   externalId: string;
   displayName: string;
   brandName: string | null;
+  productName: string;
+  variantName: string | null;
+  gtin: string | null;
   dataType: string | null;
   nutritionPreview: {
     calories: number | null;
@@ -39,6 +42,21 @@ type Envelope<T> = {
   data: T | null;
   error: { message?: string } | null;
 };
+
+type LookupRequest =
+  | {
+      action: "search_usda" | "search_open_food_facts";
+      query: string;
+    }
+  | {
+      action: "lookup_barcode";
+      barcode: string | undefined;
+    }
+  | {
+      action: "import";
+      provider: Candidate["provider"];
+      externalId: string;
+    };
 
 export function FoodSearchPicker({
   foods,
@@ -56,6 +74,8 @@ export function FoodSearchPicker({
   const [externalPending, setExternalPending] = useState(false);
   const [externalMessage, setExternalMessage] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [onlineProvider, setOnlineProvider] =
+    useState<Candidate["provider"]>("open_food_facts");
   const visibleFoods = foods.filter((food) =>
     `${food.name} ${food.brandName ?? ""} ${food.variantName ?? ""} ${food.gtin ?? ""} ${food.categories.join(" ")}`
       .toLocaleLowerCase("en-US")
@@ -69,9 +89,15 @@ export function FoodSearchPicker({
     return () => window.clearTimeout(timer);
   }, [onCatalogChanged, search]);
 
-  async function externalLookup(body: unknown) {
+  async function externalLookup(body: LookupRequest) {
     setExternalPending(true);
     setExternalMessage(null);
+    if (
+      body.action === "search_open_food_facts" ||
+      body.action === "search_usda"
+    ) {
+      setCandidates([]);
+    }
     try {
       const response = await fetch("/api/foods/lookup", {
         method: "POST",
@@ -91,10 +117,14 @@ export function FoodSearchPicker({
       }
       if (result.data.kind === "candidates") {
         setCandidates(result.data.candidates);
+        const providerName =
+          body.action === "search_open_food_facts"
+            ? "Open Food Facts"
+            : "USDA FoodData Central";
         setExternalMessage(
           result.data.candidates.length
-            ? "Choose the exact USDA result. Nothing is imported until you click Import."
-            : "USDA returned no matches. Try a more exact name, barcode, or label photo.",
+            ? `${providerName} found ${result.data.candidates.length} possible ${result.data.candidates.length === 1 ? "match" : "matches"}. Review the brand and nutrition preview, then import the exact record you want.`
+            : `${providerName} returned no matches. Try a brand plus product name, another source, a barcode, or a label photo.`,
         );
       } else {
         setCandidates([]);
@@ -105,8 +135,18 @@ export function FoodSearchPicker({
         await onCatalogChanged(result.data.displayName);
       }
     } catch (error) {
+      const alternateSource =
+        body.action === "search_open_food_facts"
+          ? " You can select USDA above and search the same name without a barcode."
+          : body.action === "search_usda"
+            ? " You can select Open Food Facts above and search the same product name without a barcode."
+            : "";
       setExternalMessage(
-        error instanceof Error ? error.message : "The lookup did not finish.",
+        `${
+          error instanceof Error
+            ? error.message
+            : "The lookup did not finish."
+        }${alternateSource}`,
       );
     } finally {
       setExternalPending(false);
@@ -119,10 +159,129 @@ export function FoodSearchPicker({
         <span>Search foods</span>
         <input
           value={search}
-          onChange={(event) => onSearchChange(event.target.value)}
+          maxLength={120}
+          disabled={externalPending}
+          onChange={(event) => {
+            onSearchChange(event.target.value);
+            setCandidates([]);
+            setExternalMessage(null);
+          }}
           placeholder="Food, brand, flavor, or barcode…"
         />
       </label>
+      <section
+        className="message-box"
+        aria-labelledby="online-food-name-search-heading"
+        aria-busy={externalPending}
+        style={{ marginTop: ".8rem" }}
+      >
+        <h3 id="online-food-name-search-heading">
+          Search online by food or product name
+        </h3>
+        <p className="field-help">
+          Type a food, brand, product, or flavor above—such as “Optimum
+          Nutrition double rich chocolate”—then search. No barcode scan is
+          required.
+        </p>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            void externalLookup({
+              action:
+                onlineProvider === "open_food_facts"
+                  ? "search_open_food_facts"
+                  : "search_usda",
+              query: search.trim(),
+            });
+          }}
+        >
+          <div className="form-row">
+            <label className="field">
+              <span>Online food source</span>
+              <select
+                value={onlineProvider}
+                disabled={externalPending}
+                onChange={(event) => {
+                  setOnlineProvider(
+                    event.target.value as Candidate["provider"],
+                  );
+                  setCandidates([]);
+                  setExternalMessage(null);
+                }}
+              >
+                <option value="open_food_facts">
+                  Packaged products and brands — Open Food Facts
+                </option>
+                <option value="usda_fdc">
+                  Generic and branded foods — USDA
+                </option>
+              </select>
+            </label>
+            <button
+              className="button button-quiet"
+              type="submit"
+              disabled={externalPending || search.trim().length < 2}
+            >
+              {externalPending ? "Searching…" : "Search online by name"}
+            </button>
+          </div>
+        </form>
+        <p className="field-help">
+          Your words are sent to the selected source only after you press the
+          button. Results are source-reported and nothing is saved until you
+          import one.
+        </p>
+        {externalMessage ? (
+          <div className="message-box" role="status" aria-live="polite">
+            {externalMessage}
+          </div>
+        ) : null}
+        {candidates.map((candidate) => (
+          <article
+            className="food-result"
+            key={`${candidate.provider}:${candidate.externalId}`}
+          >
+            <div>
+              <strong>{candidate.displayName}</strong>
+              <p className="field-help">
+                {candidate.provider === "open_food_facts"
+                  ? "Open Food Facts"
+                  : "USDA FoodData Central"}
+                {candidate.dataType ? ` · ${candidate.dataType}` : ""}
+                {candidate.gtin ? ` · barcode ${candidate.gtin}` : ""}
+              </p>
+              <p className="field-help">
+                Source-reported per 100 g:{" "}
+                {candidate.nutritionPreview.calories ?? "—"} kcal ·{" "}
+                {candidate.nutritionPreview.proteinGrams ?? "—"} g protein ·{" "}
+                {candidate.nutritionPreview.carbohydrateGrams ?? "—"} g carbs ·{" "}
+                {candidate.nutritionPreview.fatGrams ?? "—"} g fat
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={externalPending}
+              onClick={() =>
+                externalLookup({
+                  action: "import",
+                  provider: candidate.provider,
+                  externalId: candidate.externalId,
+                })
+              }
+            >
+              Import current record
+            </button>
+          </article>
+        ))}
+        {candidates.length ? (
+          <p className="field-help">
+            Import refetches the selected provider record on the server. Saved
+            records remain pending review and unavailable to generated plans
+            until approved.
+          </p>
+        ) : null}
+      </section>
+
       <div
         className="food-results"
         aria-label="Food search results"
@@ -181,79 +340,39 @@ export function FoodSearchPicker({
 
       <details className="message-box" style={{ marginTop: "1rem" }}>
         <summary>
-          <strong>Look up a larger external catalog</strong>
+          <strong>Look up an exact barcode instead</strong>
         </summary>
         <p className="field-help">
-          USDA searches FoodData Central; exact barcodes use Open Food Facts.
-          External results show their source and stay pending review.
+          Barcode lookup is optional. It uses Open Food Facts when you already
+          have the 8- to 14-digit number from a package.
         </p>
-        <div className="form-row">
-          <button
-            className="button button-quiet"
-            type="button"
-            disabled={externalPending || search.trim().length < 2}
-            onClick={() =>
-              externalLookup({ action: "search_usda", query: search.trim() })
-            }
-          >
-            Search USDA for “{search.trim() || "…"}”
-          </button>
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              const barcode = new FormData(event.currentTarget)
-                .get("barcode")
-                ?.toString()
-                .replace(/\D/g, "");
-              void externalLookup({ action: "lookup_barcode", barcode });
-            }}
-          >
-            <label className="field">
-              <span>Exact product barcode</span>
-              <div className="form-row">
-                <input
-                  name="barcode"
-                  inputMode="numeric"
-                  pattern="[0-9]{8,14}"
-                  required
-                  placeholder="8–14 digits"
-                />
-                <button className="button button-quiet" disabled={externalPending}>
-                  Look up
-                </button>
-              </div>
-            </label>
-          </form>
-        </div>
-        {externalMessage ? (
-          <div className="message-box" role="status">{externalMessage}</div>
-        ) : null}
-        {candidates.map((candidate) => (
-          <article className="food-result" key={candidate.externalId}>
-            <div>
-              <strong>{candidate.displayName}</strong>
-              <p className="field-help">
-                {candidate.dataType ?? "USDA record"} ·{" "}
-                {candidate.nutritionPreview.calories ?? "—"} kcal ·{" "}
-                {candidate.nutritionPreview.proteinGrams ?? "—"} g protein per
-                reported 100 g
-              </p>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            const barcode = new FormData(event.currentTarget)
+              .get("barcode")
+              ?.toString()
+              .replace(/\D/g, "");
+            void externalLookup({ action: "lookup_barcode", barcode });
+          }}
+        >
+          <label className="field">
+            <span>Exact product barcode</span>
+            <div className="form-row">
+              <input
+                name="barcode"
+                inputMode="numeric"
+                pattern="[0-9]{8,14}"
+                required
+                disabled={externalPending}
+                placeholder="8–14 digits"
+              />
+              <button className="button button-quiet" disabled={externalPending}>
+                Look up barcode
+              </button>
             </div>
-            <button
-              type="button"
-              disabled={externalPending}
-              onClick={() =>
-                externalLookup({
-                  action: "import",
-                  provider: candidate.provider,
-                  externalId: candidate.externalId,
-                })
-              }
-            >
-              Import exact record
-            </button>
-          </article>
-        ))}
+          </label>
+        </form>
       </details>
 
       <details className="message-box" style={{ marginTop: "1rem" }}>

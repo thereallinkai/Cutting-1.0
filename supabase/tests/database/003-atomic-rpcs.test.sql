@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
 
-select plan(56);
+select plan(62);
 
 create or replace function pg_temp.valid_plan_output(
   item_food_id uuid default '10000000-0000-4000-8000-000000000002',
@@ -53,6 +53,41 @@ as $$
     'safetyNotes', jsonb_build_array()
   )
   from generate_series(1, 7) as days(day_number);
+$$;
+
+create or replace function pg_temp.complete_test_onboarding(
+  preference_payload jsonb
+)
+returns uuid
+language sql
+volatile
+set search_path = ''
+as $$
+  select public.complete_onboarding_from_slugs(
+    175::numeric,
+    'kg',
+    'UTC',
+    'moderately_active',
+    3::smallint,
+    array[]::text[],
+    array[]::text[],
+    array[]::text[],
+    null,
+    'Test onboarding',
+    'fat_loss',
+    82::numeric,
+    75::numeric,
+    (now() at time zone 'UTC')::date,
+    (now() at time zone 'UTC')::date + 84,
+    preference_payload,
+    jsonb_build_array(
+      jsonb_build_object(
+        'warningCode', 'missing_vegetable',
+        'mealType', 'lunch',
+        'contextVersion', 'onboarding-v1'
+      )
+    )
+  );
 $$;
 
 create temporary table rpc_results (
@@ -119,12 +154,16 @@ values
 insert into public.profiles (
   user_id,
   full_name,
+  gender,
+  age,
   time_zone,
   onboarding_status
 )
 values (
   'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
   'RPC User',
+  'prefer_not_to_say',
+  30,
   'UTC',
   'in_progress'
 );
@@ -160,51 +199,51 @@ set local role authenticated;
 
 select lives_ok(
   $$
-    select public.complete_onboarding(
-      'prefer_not_to_say',
-      30::smallint,
-      175::numeric,
-      'kg',
-      'UTC',
-      'moderately_active',
-      3::smallint,
-      array[]::text[],
-      array[]::text[],
-      array[]::text[],
-      null,
-      'Test onboarding',
-      'fat_loss',
-      82::numeric,
-      75::numeric,
-      (now() at time zone 'UTC')::date,
-      (now() at time zone 'UTC')::date + 84,
+    select pg_temp.complete_test_onboarding(
       jsonb_build_array(
         jsonb_build_object(
           'mealType', 'breakfast',
-          'foodId', '10000000-0000-4000-8000-000000000002',
+          'foodSlug', 'white-rice',
           'sortOrder', 0
         ),
         jsonb_build_object(
           'mealType', 'lunch',
-          'foodId', '10000000-0000-4000-8000-000000000012',
+          'foodSlug', 'chicken-breast',
           'sortOrder', 0
         ),
         jsonb_build_object(
           'mealType', 'dinner',
-          'foodId', '10000000-0000-4000-8000-000000000015',
+          'foodSlug', 'tofu',
           'sortOrder', 0
-        )
-      ),
-      jsonb_build_array(
-        jsonb_build_object(
-          'warningCode', 'missing_vegetable',
-          'mealType', 'lunch',
-          'contextVersion', 'onboarding-v1'
         )
       )
     )
   $$,
-  'complete_onboarding persists all validated sections atomically'
+  'slug-resolving onboarding persists all validated sections atomically'
+);
+select lives_ok(
+  $$
+    select pg_temp.complete_test_onboarding(
+      jsonb_build_array(
+        jsonb_build_object(
+          'mealType', 'breakfast',
+          'foodSlug', 'white-rice',
+          'sortOrder', 0
+        ),
+        jsonb_build_object(
+          'mealType', 'lunch',
+          'foodSlug', 'chicken-breast',
+          'sortOrder', 0
+        ),
+        jsonb_build_object(
+          'mealType', 'dinner',
+          'foodSlug', 'tofu',
+          'sortOrder', 0
+        )
+      )
+    )
+  $$,
+  'replaying the same onboarding completion is idempotent'
 );
 select is(
   (
@@ -252,6 +291,138 @@ select is(
   ),
   1::bigint,
   'onboarding stores acknowledged composition warnings'
+);
+select throws_ok(
+  $$
+    select pg_temp.complete_test_onboarding(
+      jsonb_build_array(
+        jsonb_build_object(
+          'mealType', 'breakfast',
+          'foodSlug', 'white-rice',
+          'sortOrder', 0
+        ),
+        jsonb_build_object(
+          'mealType', 'lunch',
+          'foodSlug', 'chicken-breast',
+          'sortOrder', 0
+        )
+      )
+    )
+  $$,
+  '23514',
+  'Breakfast, lunch, and dinner must each contain at least one selected food.',
+  'slug-resolving onboarding requires every primary meal'
+);
+select throws_ok(
+  $$
+    select pg_temp.complete_test_onboarding(
+      jsonb_build_array(
+        jsonb_build_object(
+          'mealType', 'breakfast',
+          'foodSlug', 'white-rice',
+          'sortOrder', 0
+        ),
+        jsonb_build_object(
+          'mealType', 'breakfast',
+          'foodSlug', 'white-rice',
+          'sortOrder', 1
+        ),
+        jsonb_build_object(
+          'mealType', 'lunch',
+          'foodSlug', 'chicken-breast',
+          'sortOrder', 0
+        ),
+        jsonb_build_object(
+          'mealType', 'dinner',
+          'foodSlug', 'tofu',
+          'sortOrder', 0
+        )
+      )
+    )
+  $$,
+  '23505',
+  'A food was selected more than once for the same meal.',
+  'slug-resolving onboarding rejects duplicate meal foods'
+);
+select throws_ok(
+  $$
+    select pg_temp.complete_test_onboarding(
+      jsonb_build_array(
+        jsonb_build_object(
+          'mealType', 'breakfast',
+          'foodSlug', 'white-rice',
+          'sortOrder', 50
+        ),
+        jsonb_build_object(
+          'mealType', 'lunch',
+          'foodSlug', 'chicken-breast',
+          'sortOrder', 0
+        ),
+        jsonb_build_object(
+          'mealType', 'dinner',
+          'foodSlug', 'tofu',
+          'sortOrder', 0
+        )
+      )
+    )
+  $$,
+  '22023',
+  'Onboarding meal preferences have an unsupported structure.',
+  'slug-resolving onboarding bounds each meal sort order'
+);
+select throws_ok(
+  $$
+    select pg_temp.complete_test_onboarding(
+      (
+        select jsonb_agg(
+          jsonb_build_object(
+            'mealType', 'breakfast',
+            'foodSlug', 'white-rice',
+            'sortOrder', item_number % 50
+          )
+        )
+        from generate_series(0, 150) item(item_number)
+      )
+    )
+  $$,
+  '22023',
+  'Onboarding supports no more than 50 foods per primary meal.',
+  'slug-resolving onboarding bounds the total preference payload'
+);
+select throws_ok(
+  $$
+    select public.complete_onboarding_from_slugs(
+      175::numeric,
+      'kg',
+      'UTC',
+      'moderately_active',
+      3::smallint,
+      array[]::text[],
+      array[]::text[],
+      array[]::text[],
+      null,
+      'Test onboarding',
+      'fat_loss',
+      82::numeric,
+      75::numeric,
+      (now() at time zone 'UTC')::date,
+      (now() at time zone 'UTC')::date + 84,
+      '[]'::jsonb,
+      (
+        select jsonb_agg(
+          jsonb_build_object(
+            'warningCode', 'missing_vegetable',
+            'mealType', 'lunch',
+            'contextVersion', 'meal-composition-v1'
+          )
+        )
+        from generate_series(1, 31)
+      )
+    )
+  $$,
+  '22023',
+  'Onboarding contains too many acknowledged warnings.',
+  'slug-resolving onboarding bounds acknowledged warnings'
 );
 select throws_ok(
   $$

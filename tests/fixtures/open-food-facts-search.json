@@ -1,0 +1,32 @@
+{
+  "count": 2,
+  "page": 1,
+  "page_count": 2,
+  "page_size": 10,
+  "products": [
+    {
+      "code": "748927022650",
+      "product_name": "Gold Standard 100% Whey Double Rich Chocolate",
+      "brands": "Optimum Nutrition",
+      "quantity": "2 lb",
+      "nutriments": {
+        "energy-kcal_100g": 375,
+        "proteins_100g": 75,
+        "carbohydrates_100g": 9.4,
+        "fat_100g": 3.1
+      }
+    },
+    {
+      "code": "0099999999999",
+      "product_name": "Chocolate Protein Powder",
+      "brands": "Example Foods",
+      "quantity": "500 g",
+      "nutriments": {
+        "energy-kj_100g": 1569,
+        "proteins_100g": 70,
+        "carbohydrates_100g": 12,
+        "fat_100g": 5
+      }
+    }
+  ]
+}

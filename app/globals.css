@@ -1,10 +1,12 @@
 @import "tailwindcss";
 
 :root {
+  color-scheme: light;
   --ink: #123524;
   --ink-soft: #456253;
   --canvas: #edf7ee;
   --paper: #fbfef9;
+  --paper-elevated: #ffffff;
   --surface: #deeddf;
   --line: #bfd4c2;
   --accent: #b8e36d;
@@ -12,10 +14,17 @@
   --sage: #a9ceb0;
   --warning: #8a5d1f;
   --danger: #9b3d35;
+  --shadow-sm: 0 8px 24px rgba(18, 74, 44, 0.07);
   --shadow: 0 20px 58px rgba(18, 74, 44, 0.11);
+  --shadow-raised: 0 24px 68px rgba(18, 74, 44, 0.16);
   --radius-lg: 24px;
   --radius-md: 16px;
   --radius-sm: 10px;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --motion-fast: 140ms;
+  --motion-base: 200ms;
+  --motion-slow: 360ms;
 }
 
 * {
@@ -27,6 +36,7 @@ html {
 }
 
 body {
+  min-height: 100vh;
   margin: 0;
   background:
     radial-gradient(circle at 8% 0%, rgba(184, 227, 109, 0.2), transparent 28rem),
@@ -37,7 +47,9 @@ body {
     "Avenir Next", Avenir, "Segoe UI", Helvetica, Arial, sans-serif;
   font-size: 16px;
   line-height: 1.55;
+  overflow-x: clip;
   text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
 }
 
 button,
@@ -82,6 +94,8 @@ img {
   background: var(--ink);
   color: white;
   padding: 0.75rem 1rem;
+  box-shadow: var(--shadow-sm);
+  transition: top var(--motion-base) var(--ease-out);
 }
 
 .skip-link:focus {
@@ -114,12 +128,16 @@ img {
   font-weight: 750;
   letter-spacing: -0.02em;
   transition:
-    color 180ms ease,
-    transform 180ms ease;
+    color var(--motion-base) ease,
+    transform var(--motion-base) var(--ease-out);
 }
 
 .brand:hover {
   color: var(--accent-dark);
+}
+
+.brand:active {
+  transform: scale(0.98);
 }
 
 .brand-mark {
@@ -131,6 +149,14 @@ img {
   background: linear-gradient(145deg, #caef84, var(--accent));
   color: var(--ink);
   box-shadow: 0 7px 18px rgba(31, 107, 67, 0.16);
+  transition:
+    box-shadow var(--motion-base) ease,
+    transform var(--motion-base) var(--ease-out);
+}
+
+.brand:hover .brand-mark {
+  box-shadow: 0 10px 24px rgba(31, 107, 67, 0.22);
+  transform: rotate(-6deg) scale(1.04);
 }
 
 .header-actions,
@@ -147,6 +173,18 @@ img {
   padding-inline: 0.75rem;
   color: var(--ink-soft);
   font-weight: 650;
+  transition:
+    color var(--motion-fast) ease,
+    opacity var(--motion-fast) ease,
+    transform var(--motion-fast) var(--ease-out);
+}
+
+.text-link:hover {
+  color: var(--accent-dark);
+}
+
+.text-link:active {
+  transform: translateY(1px);
 }
 
 .button {
@@ -162,14 +200,20 @@ img {
   font-weight: 750;
   line-height: 1.1;
   transition:
-    transform 160ms ease,
-    box-shadow 160ms ease,
-    background-color 160ms ease,
-    border-color 160ms ease;
+    transform var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-base) ease,
+    background-color var(--motion-base) ease,
+    border-color var(--motion-base) ease,
+    color var(--motion-base) ease,
+    opacity var(--motion-fast) ease;
 }
 
 .button:hover {
   transform: translateY(-1px);
+}
+
+.button:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
 }
 
 .button:disabled {
@@ -663,6 +707,14 @@ img {
 
 .auth-card {
   width: min(100%, 480px);
+  animation: auth-card-enter 440ms var(--ease-out) both;
+}
+
+@keyframes auth-card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
 }
 
 .auth-card h1 {
@@ -708,6 +760,12 @@ img {
   border-radius: 11px;
   background: rgba(255, 255, 255, 0.72);
   padding: 0.72rem 0.85rem;
+  box-shadow: 0 1px 0 rgba(18, 53, 36, 0.03);
+  outline: none;
+  transition:
+    background-color var(--motion-base) ease,
+    border-color var(--motion-base) ease,
+    box-shadow var(--motion-base) ease;
 }
 
 .field textarea {
@@ -718,8 +776,15 @@ img {
 .field input:focus,
 .field select:focus,
 .field textarea:focus {
-  border-color: var(--accent-dark);
-  outline: 3px solid rgba(31, 107, 67, 0.18);
+  border-color: #2f7d4e;
+  background: white;
+  box-shadow: 0 0 0 3px rgba(47, 125, 78, 0.13);
+}
+
+.field input:hover:not(:disabled),
+.field select:hover:not(:disabled),
+.field textarea:hover:not(:disabled) {
+  border-color: #9fc1a6;
 }
 
 .field-help,
@@ -753,6 +818,19 @@ img {
   border-radius: 50%;
   background: transparent;
   cursor: pointer;
+  transition:
+    background-color var(--motion-base) ease,
+    color var(--motion-base) ease,
+    transform var(--motion-fast) var(--ease-out);
+}
+
+.icon-button:hover {
+  background: var(--surface);
+  color: var(--accent-dark);
+}
+
+.icon-button:active {
+  transform: scale(0.94);
 }
 
 .password-wrap .icon-button {
@@ -812,12 +890,19 @@ img {
   color: #6a4b17;
   padding: 0.85rem 1rem;
   font-size: 0.84rem;
+  box-shadow: 0 8px 22px rgba(106, 75, 23, 0.06);
+  animation: feedback-enter var(--motion-slow) var(--ease-out) both;
+}
+
+.message-box > span {
+  flex: 1;
 }
 
 .message-box.error {
   border-color: #dfaaa6;
   background: #fff5f4;
   color: #81382f;
+  box-shadow: 0 8px 22px rgba(129, 56, 47, 0.06);
 }
 
 details.message-box {
@@ -829,6 +914,10 @@ details.message-box > summary {
   display: flex;
   align-items: center;
   cursor: pointer;
+}
+
+details.message-box[open] > summary {
+  margin-bottom: 0.5rem;
 }
 
 .sr-only {
@@ -855,6 +944,7 @@ details.message-box > summary {
   inset: 0;
   background: rgba(17, 28, 26, 0.64);
   backdrop-filter: blur(4px);
+  animation: overlay-enter var(--motion-base) ease both;
 }
 
 .dialog-content {
@@ -871,6 +961,8 @@ details.message-box > summary {
   background: var(--paper);
   box-shadow: var(--shadow);
   padding: 1.4rem;
+  animation: dialog-enter var(--motion-slow) var(--ease-out) both;
+  overscroll-behavior: contain;
 }
 
 .dialog-content h2 {
@@ -895,15 +987,39 @@ details.message-box > summary {
 .loading-bars i {
   height: 14px;
   border-radius: 999px;
-  background: #cbdccc;
-  animation: loading-pulse 1.4s ease-in-out infinite;
+  background:
+    linear-gradient(
+      100deg,
+      #cbdccc 20%,
+      #e8f2e6 42%,
+      #cbdccc 64%
+    );
+  background-size: 220% 100%;
+  animation: loading-pulse 1.45s ease-in-out infinite;
 }
 
 .loading-bars i:nth-child(2) { width: 82%; animation-delay: 120ms; }
 .loading-bars i:nth-child(3) { width: 64%; animation-delay: 240ms; }
 
 @keyframes loading-pulse {
-  50% { opacity: 0.42; }
+  to { background-position-x: -220%; }
+}
+
+@keyframes feedback-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes overlay-enter {
+  from { opacity: 0; }
+}
+
+@keyframes dialog-enter {
+  from {
+    transform: translate(-50%, calc(-50% + 12px)) scale(0.985);
+  }
 }
 
 .legal-page {
@@ -941,10 +1057,14 @@ details.message-box > summary {
   min-height: 100vh;
   display: grid;
   grid-template-columns: 244px minmax(0, 1fr);
+  background:
+    radial-gradient(circle at 86% -8%, rgba(184, 227, 109, 0.13), transparent 28rem),
+    transparent;
 }
 
 .sidebar {
   position: sticky;
+  z-index: 40;
   top: 0;
   height: 100vh;
   display: flex;
@@ -954,6 +1074,7 @@ details.message-box > summary {
     linear-gradient(180deg, rgba(255, 255, 255, 0.38), transparent 45%),
     #deeddf;
   padding: 1.5rem 1rem;
+  box-shadow: 10px 0 30px rgba(18, 74, 44, 0.025);
 }
 
 .sidebar .brand {
@@ -966,6 +1087,8 @@ details.message-box > summary {
 }
 
 .nav-link {
+  position: relative;
+  isolation: isolate;
   min-height: 48px;
   display: flex;
   align-items: center;
@@ -981,15 +1104,44 @@ details.message-box > summary {
     transform 170ms ease;
 }
 
+.nav-link::before {
+  position: absolute;
+  z-index: -1;
+  inset: 5px auto 5px -0.35rem;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--accent);
+  content: "";
+  opacity: 0;
+  transform: scaleY(0.35);
+  transition:
+    opacity var(--motion-base) ease,
+    transform var(--motion-base) var(--ease-out);
+}
+
+.nav-link svg {
+  transition: transform var(--motion-base) var(--ease-out);
+}
+
 .nav-link:hover {
   background: rgba(255, 255, 255, 0.7);
   color: var(--ink);
   transform: translateX(2px);
 }
 
+.nav-link:hover svg {
+  transform: scale(1.06);
+}
+
 .nav-link.active {
   background: var(--ink);
   color: white;
+  box-shadow: 0 8px 20px rgba(18, 53, 36, 0.14);
+}
+
+.nav-link.active::before {
+  opacity: 1;
+  transform: scaleY(1);
 }
 
 .sidebar-footer {
@@ -1016,7 +1168,15 @@ details.message-box > summary {
 .profile-chip.active {
   border-color: rgba(31, 107, 67, 0.2);
   background: rgba(251, 254, 249, 0.76);
+}
+
+.profile-chip:hover {
   transform: translateY(-1px);
+}
+
+.profile-chip.active {
+  border-color: rgba(31, 107, 67, 0.32);
+  box-shadow: inset 3px 0 var(--accent-dark);
 }
 
 .avatar {
@@ -1030,6 +1190,16 @@ details.message-box > summary {
   color: var(--ink);
   font-size: 0.78rem;
   font-weight: 800;
+  box-shadow: 0 6px 16px rgba(31, 107, 67, 0.12);
+  transition:
+    box-shadow var(--motion-base) ease,
+    transform var(--motion-base) var(--ease-out);
+}
+
+.profile-chip:hover .avatar,
+.mobile-profile-link:hover .avatar {
+  box-shadow: 0 8px 20px rgba(31, 107, 67, 0.2);
+  transform: scale(1.04);
 }
 
 .profile-chip div {
@@ -1064,12 +1234,12 @@ details.message-box > summary {
 
 .page-transition {
   width: 100%;
-  animation: page-enter 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: page-enter 320ms var(--ease-out) both;
 }
 
 @keyframes page-enter {
   from {
-    transform: translateY(8px);
+    transform: translateY(9px) scale(0.997);
   }
   to {
     transform: translateY(0);
@@ -1087,6 +1257,13 @@ details.message-box > summary {
   justify-content: space-between;
   gap: 2rem;
   margin-bottom: 2.2rem;
+  animation: section-enter 420ms 40ms var(--ease-out) both;
+}
+
+@keyframes section-enter {
+  from {
+    transform: translateY(8px);
+  }
 }
 
 .page-header h1 {
@@ -1117,6 +1294,19 @@ details.message-box > summary {
   background: var(--paper);
   box-shadow: 0 10px 30px rgba(18, 74, 44, 0.045);
   padding: 1.25rem;
+  transition:
+    border-color var(--motion-base) ease,
+    box-shadow var(--motion-base) ease,
+    transform var(--motion-base) var(--ease-out);
+}
+
+.ui-card {
+  border-color: var(--line);
+}
+
+.ui-card:hover {
+  border-color: #a9c9af;
+  box-shadow: 0 18px 46px rgba(18, 74, 44, 0.1);
 }
 
 .card-title {
@@ -1154,6 +1344,8 @@ details.message-box > summary {
 }
 
 .day-status-card {
+  position: relative;
+  overflow: hidden;
   display: grid;
   align-items: center;
   gap: 2rem;
@@ -1162,6 +1354,27 @@ details.message-box > summary {
   background: var(--ink);
   color: white;
   padding: clamp(1.4rem, 4vw, 2.25rem);
+  box-shadow: 0 18px 42px rgba(18, 53, 36, 0.16);
+}
+
+.day-status-card::after {
+  position: absolute;
+  right: -4rem;
+  top: -6rem;
+  width: 15rem;
+  height: 15rem;
+  border: 1px solid rgba(184, 227, 109, 0.16);
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 2.5rem rgba(184, 227, 109, 0.025),
+    0 0 0 5rem rgba(184, 227, 109, 0.018);
+  content: "";
+  pointer-events: none;
+}
+
+.day-status-card > * {
+  position: relative;
+  z-index: 1;
 }
 
 .day-status-card h2 {
@@ -1189,6 +1402,9 @@ details.message-box > summary {
   font-size: 1.2rem;
   font-weight: 800;
   transform: rotate(45deg);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05),
+    0 10px 28px rgba(7, 38, 22, 0.22);
 }
 
 .status-ring span {
@@ -1209,6 +1425,18 @@ details.message-box > summary {
   border-radius: 14px;
   background: var(--paper);
   padding: 0.85rem;
+  transition:
+    background-color var(--motion-base) ease,
+    border-color var(--motion-base) ease,
+    box-shadow var(--motion-base) ease,
+    transform var(--motion-base) var(--ease-out);
+}
+
+.meal-row:hover {
+  border-color: #9fc1a6;
+  background: var(--paper-elevated);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
 }
 
 .meal-icon {
@@ -1294,12 +1522,34 @@ details.message-box > summary {
   cursor: pointer;
   font-size: 0.76rem;
   font-weight: 750;
+  transition:
+    background-color var(--motion-base) ease,
+    border-color var(--motion-base) ease,
+    box-shadow var(--motion-base) ease,
+    color var(--motion-base) ease,
+    transform var(--motion-fast) var(--ease-out);
+}
+
+.check-button:hover:not(:disabled) {
+  border-color: #7eaa89;
+  box-shadow: 0 6px 16px rgba(18, 74, 44, 0.09);
+  transform: translateY(-1px);
+}
+
+.check-button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.check-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .check-button.complete {
   border-color: #71825b;
   background: #edf4e8;
   color: #45593f;
+  box-shadow: inset 0 0 0 1px rgba(113, 130, 91, 0.08);
 }
 
 .metric-grid {
@@ -1314,6 +1564,14 @@ details.message-box > summary {
   border-radius: 12px;
   background: var(--surface);
   padding: 0.9rem;
+  transition:
+    background-color var(--motion-base) ease,
+    transform var(--motion-base) var(--ease-out);
+}
+
+.metric:hover {
+  background: #e6f2e5;
+  transform: translateY(-1px);
 }
 
 .metric span {
@@ -1374,6 +1632,8 @@ details.message-box > summary {
   padding: 0.85rem 1rem;
   color: #4e5e26;
   font-size: 0.84rem;
+  box-shadow: 0 8px 22px rgba(78, 94, 38, 0.055);
+  animation: feedback-enter var(--motion-slow) var(--ease-out) both;
 }
 
 .plan-overview {
@@ -1387,6 +1647,7 @@ details.message-box > summary {
   background: var(--ink);
   color: white;
   padding: 1.6rem;
+  box-shadow: 0 16px 38px rgba(18, 53, 36, 0.14);
 }
 
 .range-card .card-title p {
@@ -1435,12 +1696,25 @@ details.message-box > summary {
   cursor: pointer;
   font-size: 0.72rem;
   font-weight: 750;
+  transition:
+    background-color var(--motion-base) ease,
+    border-color var(--motion-base) ease,
+    box-shadow var(--motion-base) ease,
+    color var(--motion-base) ease,
+    transform var(--motion-fast) var(--ease-out);
+}
+
+.day-tab:hover:not(.active) {
+  border-color: #8fb69a;
+  background: white;
+  transform: translateY(-1px);
 }
 
 .day-tab.active {
   border-color: var(--ink);
   background: var(--ink);
   color: white;
+  box-shadow: 0 7px 18px rgba(18, 53, 36, 0.15);
 }
 
 .plan-meals {
@@ -1455,6 +1729,16 @@ details.message-box > summary {
   border-radius: var(--radius-md);
   background: var(--paper);
   padding: 1.15rem;
+  transition:
+    border-color var(--motion-base) ease,
+    box-shadow var(--motion-base) ease,
+    transform var(--motion-base) var(--ease-out);
+}
+
+.plan-meal-card:hover {
+  border-color: #a1c3a8;
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-2px);
 }
 
 .plan-meal-card h3 {
@@ -1526,6 +1810,7 @@ details.message-box > summary {
   justify-content: space-between;
   border-bottom: 1px solid var(--line);
   padding: 1rem 1.2rem;
+  background: rgba(251, 254, 249, 0.9);
 }
 
 .calendar-toolbar h2 {
@@ -1564,11 +1849,34 @@ details.message-box > summary {
   background: white;
   padding: 0.6rem;
   cursor: pointer;
+  transition:
+    background-color var(--motion-base) ease,
+    box-shadow var(--motion-base) ease,
+    color var(--motion-base) ease,
+    transform var(--motion-fast) var(--ease-out);
 }
 
 .calendar-day:hover,
 .calendar-day.selected {
   background: #f1f6e4;
+}
+
+.calendar-day:hover:not(:disabled) {
+  z-index: 1;
+  box-shadow: inset 0 0 0 1px #95b99d;
+}
+
+.calendar-day:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.calendar-day.selected {
+  z-index: 2;
+  box-shadow: inset 0 0 0 2px var(--accent-dark);
+}
+
+.calendar-day:disabled {
+  cursor: default;
 }
 
 .calendar-day.outside {
@@ -1592,11 +1900,16 @@ details.message-box > summary {
   height: 7px;
   border: 1px solid #8e9794;
   border-radius: 50%;
+  transition:
+    background-color var(--motion-base) ease,
+    border-color var(--motion-base) ease,
+    transform var(--motion-base) var(--ease-out);
 }
 
 .meal-dots i.complete {
   border-color: #708157;
   background: #708157;
+  transform: scale(1.08);
 }
 
 .completion-copy {
@@ -1656,6 +1969,16 @@ details.message-box > summary {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  transition:
+    border-color var(--motion-base) ease,
+    box-shadow var(--motion-base) ease,
+    transform var(--motion-base) var(--ease-out);
+}
+
+.summary-stat:hover {
+  border-color: #a1c3a8;
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-2px);
 }
 
 .summary-stat span {
@@ -1697,6 +2020,14 @@ details.message-box > summary {
   grid-template-columns: 1fr auto auto;
   border-top: 1px solid var(--line);
   padding: 0.75rem 0;
+  transition:
+    background-color var(--motion-base) ease,
+    padding-inline var(--motion-base) var(--ease-out);
+}
+
+.history-row:hover {
+  background: rgba(222, 237, 223, 0.38);
+  padding-inline: 0.45rem;
 }
 
 .history-row span {
@@ -1731,11 +2062,16 @@ details.message-box > summary {
   color: #65706d;
   font-size: 0.8rem;
   font-weight: 700;
+  transition:
+    background-color var(--motion-base) ease,
+    color var(--motion-base) ease,
+    transform var(--motion-base) var(--ease-out);
 }
 
 .settings-index a:hover {
   background: rgba(255, 255, 255, 0.6);
   color: var(--ink);
+  transform: translateX(2px);
 }
 
 .settings-content {
@@ -2544,6 +2880,7 @@ details.message-box > summary {
     background: rgba(237, 247, 238, 0.94);
     padding: 0.55rem 1rem;
     backdrop-filter: blur(15px);
+    box-shadow: 0 8px 24px rgba(18, 74, 44, 0.045);
   }
 
   .mobile-app-header .brand-mark {
@@ -2557,6 +2894,17 @@ details.message-box > summary {
     display: grid;
     place-items: center;
     border-radius: 50%;
+    transition:
+      background-color var(--motion-base) ease,
+      transform var(--motion-fast) var(--ease-out);
+  }
+
+  .mobile-profile-link:hover {
+    background: rgba(255, 255, 255, 0.64);
+  }
+
+  .mobile-profile-link:active {
+    transform: scale(0.95);
   }
 
   .app-main {
@@ -2575,6 +2923,7 @@ details.message-box > summary {
     background: rgba(248, 253, 247, 0.97);
     padding: 0.4rem 0.35rem calc(0.4rem + env(safe-area-inset-bottom));
     backdrop-filter: blur(14px);
+    box-shadow: 0 -12px 32px rgba(18, 74, 44, 0.07);
   }
 
   .mobile-nav .nav-link {
@@ -2588,8 +2937,20 @@ details.message-box > summary {
   }
 
   .mobile-nav .nav-link.active {
-    background: transparent;
-    color: #526321;
+    background: rgba(222, 237, 223, 0.72);
+    color: var(--accent-dark);
+    box-shadow: none;
+  }
+
+  .mobile-nav .nav-link::before {
+    inset: auto 28% -0.18rem;
+    width: auto;
+    height: 3px;
+    transform: scaleX(0.35);
+  }
+
+  .mobile-nav .nav-link.active::before {
+    transform: scaleX(1);
   }
 
   .page-header {
@@ -2648,15 +3009,57 @@ details.message-box > summary {
   }
 
   .calendar-card {
-    overflow-x: auto;
+    display: block;
+    overflow: hidden;
   }
 
   .calendar-grid {
-    min-width: 680px;
+    min-width: 0;
   }
 
-  .calendar-card {
+  .calendar-toolbar {
+    padding: 0.8rem;
+  }
+
+  .weekday {
+    padding: 0.42rem 0.1rem;
+    font-size: 0.58rem;
+  }
+
+  .calendar-day {
+    min-height: 72px;
+    gap: 0.3rem;
+    padding: 0.42rem 0.22rem;
+  }
+
+  .calendar-day .completion-copy {
     display: none;
+  }
+
+  .calendar-day .meal-dots {
+    justify-content: center;
+    gap: 0.15rem;
+  }
+
+  .calendar-day .meal-dots i {
+    width: 5px;
+    height: 5px;
+  }
+
+  .day-meal > div {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.55rem;
+  }
+
+  .day-meal > div > div {
+    width: 100%;
+  }
+
+  .day-meal > div > div .button,
+  .day-meal > div > div .check-button {
+    min-width: 0;
+    flex: 1 1 8rem;
   }
 
   .progress-summary {
@@ -2801,6 +3204,35 @@ details.message-box > summary {
     width: 58px;
     height: 58px;
   }
+
+  .mobile-app-header .brand {
+    gap: 0.45rem;
+    font-size: 0.9rem;
+  }
+
+  .calendar-toolbar h2 {
+    font-size: 1.15rem;
+  }
+
+  .calendar-day {
+    min-height: 66px;
+  }
+}
+
+@media (hover: none) {
+  .button:hover,
+  .brand:hover .brand-mark,
+  .nav-link:hover,
+  .profile-chip:hover,
+  .meal-row:hover,
+  .metric:hover,
+  .day-tab:hover,
+  .plan-meal-card:hover,
+  .summary-stat:hover,
+  .shopping-links a:hover,
+  .settings-index a:hover {
+    transform: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2810,6 +3242,26 @@ details.message-box > summary {
     scroll-behavior: auto !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
     transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+  }
+}
+
+@media (forced-colors: active) {
+  .nav-link.active,
+  .day-tab.active,
+  .calendar-day.selected,
+  .check-button.complete {
+    border: 2px solid CanvasText;
+  }
+
+  .status-ring {
+    border-color: CanvasText;
+  }
+
+  .meal-dots i.complete {
+    border-color: Highlight;
+    background: Highlight;
   }
 }
