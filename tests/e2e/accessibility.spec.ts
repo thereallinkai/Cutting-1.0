@@ -51,6 +51,8 @@ test("public layout is usable and free of high-impact axe violations at required
 test("protected mock pages have no serious or critical axe violations", async ({
   page,
 }) => {
+  // This test intentionally cold-compiles and scans six routes in CI.
+  test.setTimeout(90_000);
   await page.setViewportSize({ width: 1280, height: 900 });
   for (const path of [
     "/today",
@@ -69,6 +71,9 @@ test("protected mock pages have no serious or critical axe violations", async ({
 test("Today, Calendar, Profile, and the tutorial reflow at required widths", async ({
   page,
 }) => {
+  // Sixteen route/viewport combinations plus four axe scans can exceed
+  // Playwright's single-test default while the CI development server compiles.
+  test.setTimeout(90_000);
   for (const width of [375, 768, 1280, 1440]) {
     await page.setViewportSize({ width, height: 900 });
 
