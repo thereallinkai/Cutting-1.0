@@ -10,6 +10,7 @@ export type NutritionUnit = "g" | "serving";
 export type NutritionVerificationStatus =
   | "verified"
   | "user_label"
+  | "source_reported"
   | "pending_verification"
   | "unavailable";
 

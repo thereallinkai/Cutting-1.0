@@ -1,5 +1,5 @@
 {
-  "name": "Cutting Plan",
+  "name": "Let's Go Green!",
   "build": {
     "dockerfile": "Dockerfile",
     "context": ".."
@@ -30,7 +30,7 @@
   ],
   "portsAttributes": {
     "3000": {
-      "label": "Cutting Plan",
+      "label": "Let's Go Green!",
       "onAutoForward": "openPreview",
       "visibility": "private"
     },

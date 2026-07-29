@@ -18,17 +18,22 @@ test("development Today check-in sends the desired final state", async ({
     page.getByRole("heading", { level: 1, name: "Good morning, Jamie." }),
   ).toBeVisible();
   const dinnerRow = page.locator(".meal-row").filter({ hasText: "Dinner" });
-  const completionButton = dinnerRow.getByRole("button");
+  const completionButton = dinnerRow.getByRole("button", {
+    name: "Mark completed",
+  });
   await expect(completionButton).toHaveAttribute("aria-pressed", "false");
   await page.waitForLoadState("networkidle");
 
   await completionButton.click();
-  await expect(completionButton).toHaveText("Completed");
-  await expect(completionButton).toHaveAttribute("aria-pressed", "true");
+  const completedButton = dinnerRow.getByRole("button", {
+    name: "Completed",
+  });
+  await expect(completedButton).toHaveAttribute("aria-pressed", "true");
   expect(submittedState).toEqual({
-    breakfastCompleted: true,
-    lunchCompleted: true,
-    dinnerCompleted: true,
+    kind: "meal_status",
+    mealType: "dinner",
+    status: "completed",
+    skipReason: null,
   });
 });
 

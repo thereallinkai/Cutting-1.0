@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
 
-select plan(25);
+select plan(56);
 
 create or replace function pg_temp.valid_plan_output(
   item_food_id uuid default '10000000-0000-4000-8000-000000000002',
@@ -75,19 +75,46 @@ insert into auth.users (
   created_at,
   updated_at
 )
-values (
-  '00000000-0000-0000-0000-000000000000',
-  'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
-  'authenticated',
-  'authenticated',
-  'rpc-user@example.test',
-  '',
-  now(),
-  '{"provider":"email","providers":["email"]}'::jsonb,
-  '{}'::jsonb,
-  now(),
-  now()
-);
+values
+  (
+    '00000000-0000-0000-0000-000000000000',
+    'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+    'authenticated',
+    'authenticated',
+    'rpc-user@example.test',
+    '',
+    now(),
+    '{"provider":"email","providers":["email"]}'::jsonb,
+    '{}'::jsonb,
+    now(),
+    now()
+  ),
+  (
+    '00000000-0000-0000-0000-000000000000',
+    'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+    'authenticated',
+    'authenticated',
+    'reservation-user@example.test',
+    '',
+    now(),
+    '{"provider":"email","providers":["email"]}'::jsonb,
+    '{}'::jsonb,
+    now(),
+    now()
+  ),
+  (
+    '00000000-0000-0000-0000-000000000000',
+    'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+    'authenticated',
+    'authenticated',
+    'stale-reservation-user@example.test',
+    '',
+    now(),
+    '{"provider":"email","providers":["email"]}'::jsonb,
+    '{}'::jsonb,
+    now(),
+    now()
+  );
 
 insert into public.profiles (
   user_id,
@@ -226,6 +253,234 @@ select is(
   1::bigint,
   'onboarding stores acknowledged composition warnings'
 );
+select throws_ok(
+  $$
+    select public.create_confirmed_label_food(
+      '{
+        "confirmedAccurate": true,
+        "allergensReviewed": false,
+        "restrictionsReviewed": true
+      }'::jsonb,
+      null
+    )
+  $$,
+  '23514',
+  'Confirm the nutrition, allergen, and dietary-restriction review before using this label.',
+  'label confirmation requires explicit allergen and restriction review'
+);
+select throws_ok(
+  $$
+    select public.create_confirmed_label_food(
+      '{
+        "confirmedAccurate": "true",
+        "allergensReviewed": "true",
+        "restrictionsReviewed": "true"
+      }'::jsonb,
+      null
+    )
+  $$,
+  '23514',
+  'Confirm the nutrition, allergen, and dietary-restriction review before using this label.',
+  'label confirmation requires JSON booleans rather than truthy strings'
+);
+select throws_ok(
+  $$
+    select public.create_confirmed_label_food(
+      '{
+        "confirmedAccurate": true,
+        "allergensReviewed": true,
+        "restrictionsReviewed": true,
+        "allergenStatement": "Contains milk and soy.",
+        "allergenSlugs": ["soy"]
+      }'::jsonb,
+      null
+    )
+  $$,
+  '23514',
+  'Every allergen named in the package statement must be selected before confirmation.',
+  'direct label confirmation cannot omit milk named by the package statement'
+);
+select throws_ok(
+  $$
+    insert into public.meal_preferences (
+      user_id,
+      meal_type,
+      food_id,
+      sort_order
+    )
+    values (
+      'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      'morning_snack',
+      '10000000-0000-4000-8000-000000000002',
+      0
+    )
+  $$,
+  '23514',
+  'new row for relation "meal_preferences" violates check constraint "meal_preferences_primary_meal_type_check"',
+  'onboarding preferences reject optional snack meal types'
+);
+
+select lives_ok(
+  $$
+    select public.set_daily_checkin_note(
+      (now() at time zone 'UTC')::date,
+      'Keep this day note'
+    )
+  $$,
+  'a day note can be saved independently'
+);
+select lives_ok(
+  $$
+    select public.set_daily_meal_checkin(
+      (now() at time zone 'UTC')::date,
+      'lunch',
+      'skipped',
+      'Schedule changed'
+    )
+  $$,
+  'a meal can be skipped with an optional reason'
+);
+select is(
+  (
+    select notes
+    from public.daily_checkins
+    where user_id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+      and local_date = (now() at time zone 'UTC')::date
+  ),
+  'Keep this day note',
+  'a per-slot status change preserves the day note'
+);
+select ok(
+  (
+    select status = 'skipped' and skip_reason = 'Schedule changed'
+    from public.daily_meal_checkins
+    where user_id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+      and local_date = (now() at time zone 'UTC')::date
+      and meal_type = 'lunch'
+  ),
+  'the explicit skipped state and reason are stored'
+);
+select lives_ok(
+  $$
+    select public.add_daily_meal_item(
+      (now() at time zone 'UTC')::date,
+      'morning_snack',
+      '10000000-0000-4000-8000-000000000002'
+    )
+  $$,
+  'an accessible catalog food can be recorded in a snack slot'
+);
+select is(
+  (
+    select count(*)
+    from public.daily_meal_items
+    where user_id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+  ),
+  1::bigint,
+  'recording a snack creates one private food-presence row'
+);
+select throws_ok(
+  $$
+    select public.set_daily_meal_checkin(
+      (now() at time zone 'UTC')::date,
+      'morning_snack',
+      'skipped',
+      'Changed my mind'
+    )
+  $$,
+  '23514',
+  'A meal slot with recorded food items cannot be skipped.',
+  'a meal slot with recorded foods cannot transition to skipped'
+);
+select is(
+  (
+    select status::text
+    from public.daily_meal_checkins
+    where user_id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+      and local_date = (now() at time zone 'UTC')::date
+      and meal_type = 'morning_snack'
+  ),
+  'completed',
+  'a rejected skip transition preserves the completed slot state'
+);
+
+reset role;
+select throws_ok(
+  $$
+    insert into public.daily_meal_items (
+      meal_checkin_id,
+      user_id,
+      food_id,
+      sort_order
+    )
+    select
+      id,
+      user_id,
+      '10000000-0000-4000-8000-000000000002',
+      0
+    from public.daily_meal_checkins
+    where user_id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+      and local_date = (now() at time zone 'UTC')::date
+      and meal_type = 'lunch'
+  $$,
+  '23514',
+  'A skipped meal slot cannot contain recorded food items.',
+  'a trusted direct write cannot add an item to a skipped slot'
+);
+select is(
+  (
+    select count(*)
+    from public.daily_meal_items
+    where user_id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+  ),
+  1::bigint,
+  'the rejected skipped-slot insert leaves recorded foods unchanged'
+);
+
+select set_config(
+  'request.jwt.claim.sub',
+  'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+  true
+);
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"cccccccc-cccc-4ccc-8ccc-cccccccccccc","role":"authenticated"}',
+  true
+);
+set local role authenticated;
+
+select lives_ok(
+  $$
+    select public.delete_daily_meal_item(
+      (
+        select id
+        from public.daily_meal_items
+        where user_id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+        limit 1
+      )
+    )
+  $$,
+  'the owner can delete a recorded snack food'
+);
+select is(
+  (
+    select count(*)
+    from public.daily_meal_items
+    where user_id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+  ),
+  0::bigint,
+  'deleting the snack food removes its presence row'
+);
+select ok(
+  (
+    select status = 'not_marked' and skip_reason is null
+    from public.daily_meal_checkins
+    where user_id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+      and local_date = (now() at time zone 'UTC')::date
+      and meal_type = 'morning_snack'
+  ),
+  'deleting the final snack item atomically clears its completed slot state'
+);
 
 insert into rpc_results (goal_id)
 select id
@@ -256,7 +511,7 @@ values (
   'rpc-request-one',
   'mock',
   'mock-v1',
-  'cutting-plan-v1',
+  'lets-go-green-v2',
   'processing'
 );
 
@@ -268,7 +523,7 @@ select lives_ok(
       (select goal_id from rpc_results),
       'mock',
       'mock-v1',
-      'cutting-plan-v1',
+      'lets-go-green-v2',
       '{}'::jsonb,
       pg_temp.valid_plan_output(),
       'c4000000-0000-4000-8000-000000000001'
@@ -307,6 +562,25 @@ select is(
   21::bigint,
   'the plan version contains three meals per day'
 );
+select throws_ok(
+  $$
+    insert into public.plan_meals (
+      plan_day_id,
+      meal_type,
+      sort_order
+    )
+    select
+      id,
+      'morning_snack',
+      3
+    from public.plan_days
+    where plan_id = (select plan_id from rpc_results)
+      and day_index = 1
+  $$,
+  '23514',
+  'new row for relation "plan_meals" violates check constraint "plan_meals_primary_meal_type_check"',
+  'normalized plan meals reject optional snack meal types'
+);
 select is(
   (
     select count(*)
@@ -335,7 +609,7 @@ select is(
     (select goal_id from rpc_results),
     'mock',
     'mock-v1',
-    'cutting-plan-v1',
+    'lets-go-green-v2',
     '{}'::jsonb,
     pg_temp.valid_plan_output(),
     'c4000000-0000-4000-8000-000000000001'
@@ -430,7 +704,7 @@ values (
   'rpc-request-allergen',
   'mock',
   'mock-v1',
-  'cutting-plan-v1',
+  'lets-go-green-v2',
   'processing'
 );
 
@@ -441,7 +715,7 @@ select throws_ok(
       (select goal_id from rpc_results),
       'mock',
       'mock-v1',
-      'cutting-plan-v1',
+      'lets-go-green-v2',
       '{}'::jsonb,
       pg_temp.valid_plan_output(
         '10000000-0000-4000-8000-000000000006',
@@ -493,7 +767,7 @@ values (
   'rpc-request-two',
   'mock',
   'mock-v1',
-  'cutting-plan-v1',
+  'lets-go-green-v2',
   'processing'
 );
 
@@ -504,7 +778,7 @@ select throws_ok(
       (select goal_id from rpc_results),
       'mock',
       'mock-v1',
-      'cutting-plan-v1',
+      'lets-go-green-v2',
       '{}'::jsonb,
       pg_temp.valid_plan_output() #- '{days,0,meals}'::text[],
       'c4000000-0000-4000-8000-000000000002'
@@ -522,7 +796,7 @@ select throws_ok(
       (select goal_id from rpc_results),
       'mock',
       'mock-v1',
-      'cutting-plan-v1',
+      'lets-go-green-v2',
       '{}'::jsonb,
       pg_temp.valid_plan_output() #- '{days,0,meals,0,items}'::text[],
       'c4000000-0000-4000-8000-000000000002'
@@ -540,7 +814,7 @@ select throws_ok(
       (select goal_id from rpc_results),
       'mock',
       'mock-v1',
-      'cutting-plan-v1',
+      'lets-go-green-v2',
       '{}'::jsonb,
       '{}'::jsonb,
       'c4000000-0000-4000-8000-000000000002'
@@ -562,6 +836,374 @@ select is(
   1::bigint,
   'a rejected plan never leaves a partial version'
 );
+
+select set_config(
+  'request.jwt.claims',
+  '{"role":"service_role"}',
+  true
+);
+set local role service_role;
+
+select throws_ok(
+  $$
+    update public.food_nutrition
+    set source_id = (
+      select source_id
+      from public.food_nutrition
+      where id = '20000000-0000-4000-8000-000000000017'
+    )
+    where id = '20000000-0000-4000-8000-000000000016'
+  $$,
+  '23514',
+  'Food provenance source must belong to the same food.',
+  'nutrition cannot reference another food source'
+);
+select throws_ok(
+  $$
+    update public.food_safety_metadata
+    set source_id = (
+      select source_id
+      from public.food_nutrition
+      where id = '20000000-0000-4000-8000-000000000017'
+    )
+    where food_id = '10000000-0000-4000-8000-000000000016'
+  $$,
+  '23514',
+  'Food provenance source must belong to the same food.',
+  'safety metadata cannot reference another food source'
+);
+
+insert into public.food_nutrition (
+  id,
+  food_id,
+  measurement_basis,
+  reference_quantity,
+  reference_unit,
+  calories,
+  protein_g,
+  carbohydrate_g,
+  fat_g,
+  source_name,
+  source_reference,
+  verification_status,
+  source_version,
+  source_id
+)
+values (
+  'c5000000-0000-4000-8000-000000000001',
+  '10000000-0000-4000-8000-000000000002',
+  'raw',
+  100,
+  'g',
+  130,
+  2.69,
+  28.17,
+  0.28,
+  'Unreviewed alternate basis',
+  'Regression fixture for an untrusted alternate measurement basis.',
+  'source_reported',
+  'test-v1',
+  (
+    select id
+    from public.food_sources
+    where food_id = '10000000-0000-4000-8000-000000000002'
+    order by created_at
+    limit 1
+  )
+);
+
+insert into public.ai_generation_requests (
+  id,
+  user_id,
+  idempotency_key,
+  provider,
+  model,
+  prompt_version,
+  status
+)
+values (
+  'c4000000-0000-4000-8000-000000000004',
+  'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+  'rpc-request-untrusted-basis',
+  'mock',
+  'mock-v1',
+  'lets-go-green-v2',
+  'processing'
+);
+
+select throws_ok(
+  $$
+    select public.save_plan_version(
+      'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      (select goal_id from rpc_results),
+      'mock',
+      'mock-v1',
+      'lets-go-green-v2',
+      '{}'::jsonb,
+      pg_temp.valid_plan_output(
+        '10000000-0000-4000-8000-000000000002',
+        'raw'
+      ),
+      'c4000000-0000-4000-8000-000000000004'
+    )
+  $$,
+  '23514',
+  'A plan item is not eligible for deterministic planning in the selected measurement basis.',
+  'a trusted food cannot smuggle an untrusted alternate measurement basis into a plan'
+);
+select is(
+  (
+    select status::text
+    from public.ai_generation_requests
+    where id = 'c4000000-0000-4000-8000-000000000004'
+  ),
+  'processing',
+  'basis rejection leaves the generation request incomplete and retryable'
+);
+
+insert into public.ai_generation_requests (
+  id,
+  user_id,
+  idempotency_key,
+  provider,
+  model,
+  prompt_version,
+  status,
+  created_at,
+  updated_at
+)
+values (
+  'c4000000-0000-4000-8000-000000000005',
+  'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+  'stale-reservation',
+  'mock',
+  'mock-v1',
+  'lets-go-green-v2',
+  'processing',
+  now() - interval '6 minutes',
+  now() - interval '6 minutes'
+);
+
+select ok(
+  (
+    select
+      result_state = 'replayed'
+      and request_status = 'failed'
+    from public.reserve_plan_generation(
+      'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+      'stale-reservation',
+      'mock',
+      'mock-v1',
+      'lets-go-green-v2'
+    )
+  ),
+  'a stale processing reservation is replayed as failed'
+);
+select ok(
+  (
+    select
+      status = 'failed'
+      and completed_at is not null
+      and sanitized_error_code = 'stale_reservation_timeout'
+    from public.ai_generation_requests
+    where id = 'c4000000-0000-4000-8000-000000000005'
+  ),
+  'stale reservation closure stores only a sanitized timeout code'
+);
+
+select is(
+  (
+    select result_state
+    from public.reserve_plan_generation(
+      'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      'reservation-one',
+      'mock',
+      'mock-v1',
+      'lets-go-green-v2'
+    )
+  ),
+  'reserved',
+  'the first plan-generation request is reserved atomically'
+);
+select is(
+  (
+    select result_state
+    from public.reserve_plan_generation(
+      'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      'reservation-one',
+      'mock',
+      'mock-v1',
+      'lets-go-green-v2'
+    )
+  ),
+  'replayed',
+  'an idempotent reservation returns the existing request'
+);
+select is(
+  (
+    select result_state
+    from public.reserve_plan_generation(
+      'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      'reservation-two',
+      'mock',
+      'mock-v1',
+      'lets-go-green-v2'
+    )
+  ),
+  'reserved',
+  'a second request inside the rate window is reserved'
+);
+select is(
+  (
+    select result_state
+    from public.reserve_plan_generation(
+      'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      'reservation-three',
+      'mock',
+      'mock-v1',
+      'lets-go-green-v2'
+    )
+  ),
+  'reserved',
+  'a third request inside the rate window is reserved'
+);
+select is(
+  (
+    select result_state
+    from public.reserve_plan_generation(
+      'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      'reservation-four',
+      'mock',
+      'mock-v1',
+      'lets-go-green-v2'
+    )
+  ),
+  'rate_limited',
+  'the fourth new request inside the rate window is rejected atomically'
+);
+
+insert into public.food_label_submissions (
+  id,
+  user_id,
+  status,
+  brand_name,
+  product_name,
+  label_data
+)
+values (
+  'c7000000-0000-4000-8000-000000000001',
+  'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+  'draft',
+  'Reservation Brand',
+  'Reservation Product',
+  '{
+    "servingWeightGrams": 30,
+    "calories": 120,
+    "proteinGrams": 20,
+    "carbohydrateGrams": 4,
+    "fatGrams": 2,
+    "confirmedAccurate": false,
+    "allergensReviewed": true,
+    "restrictionsReviewed": true
+  }'::jsonb
+);
+
+select is(
+  (
+    select allowed
+    from public.reserve_food_label_upload(
+      'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      'c7000000-0000-4000-8000-000000000001',
+      'nutrition'
+    )
+  ),
+  true,
+  'the trusted server can reserve an editable label-image upload'
+);
+
+insert into public.foods (
+  id,
+  slug,
+  english_name,
+  source,
+  ownership_type,
+  owner_user_id,
+  verification_status,
+  food_kind,
+  catalog_status
+)
+values (
+  'c9000000-0000-4000-8000-000000000001',
+  'cross-source-gtin-fixture',
+  'Cross-source GTIN fixture',
+  'Normalized account-confirmed package label; review pending',
+  'catalog',
+  null,
+  'source_reported',
+  'branded_product',
+  'pending_review'
+);
+
+insert into public.food_products (
+  food_id,
+  brand_name,
+  product_name,
+  gtin
+)
+values (
+  'c9000000-0000-4000-8000-000000000001',
+  'Fixture Brand',
+  'Fixture Product',
+  '12345678'
+);
+
+insert into public.food_sources (
+  food_id,
+  provider,
+  external_id,
+  attribution_text,
+  payload_sha256
+)
+values (
+  'c9000000-0000-4000-8000-000000000001',
+  'user_label',
+  'shared-label:12345678',
+  'Normalized account-confirmed package label.',
+  repeat('b', 64)
+);
+
+select throws_ok(
+  $$
+    select public.cache_external_food(
+      'open_food_facts',
+      '12345678',
+      '{
+        "slug": "fixture-product-open-food-facts-12345678",
+        "english_name": "Fixture Brand — Fixture Product",
+        "food_kind": "branded_product",
+        "brand_name": "Fixture Brand",
+        "product_name": "Fixture Product",
+        "gtin": "12345678"
+      }'::jsonb,
+      '{
+        "measurement_basis": "as_sold",
+        "reference_quantity": 100,
+        "reference_unit": "g",
+        "calories": 100,
+        "protein_g": 10,
+        "carbohydrate_g": 10,
+        "fat_g": 2
+      }'::jsonb,
+      '{}'::jsonb,
+      '{}'::jsonb
+    )
+  $$,
+  '23505',
+  'A catalog product with this GTIN already has another source; explicit review is required before merging.',
+  'external caching fails closed instead of discarding a cross-source GTIN payload'
+);
+
+reset role;
 
 select * from finish();
 rollback;

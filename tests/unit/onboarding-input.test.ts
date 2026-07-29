@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   normalizeMealFoodSlugs,
   parseOptionalHeight,
+  parseWeightKg,
 } from "../../src/lib/onboarding-input";
 
 describe("onboarding input compatibility", () => {
@@ -44,5 +45,24 @@ describe("onboarding input compatibility", () => {
         "rolled-oats",
       ]),
     ).toEqual(["vegetable-or-vitamin-powder", "rolled-oats"]);
+  });
+
+  it("derives bounded kilograms from the reviewed weight and unit", () => {
+    expect(parseWeightKg("82.5", "kg")).toEqual({
+      ok: true,
+      weightKg: 82.5,
+    });
+    expect(parseWeightKg("210", "lb")).toEqual({
+      ok: true,
+      weightKg: 95.254,
+    });
+    expect(parseWeightKg("43", "lb")).toEqual({
+      ok: false,
+      weightKg: null,
+    });
+    expect(parseWeightKg("1e2", "kg")).toEqual({
+      ok: false,
+      weightKg: null,
+    });
   });
 });

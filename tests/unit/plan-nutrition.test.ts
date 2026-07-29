@@ -88,9 +88,12 @@ describe("plan nutrition range validation", () => {
       },
     );
 
-    expect(result.valid).toBe(true);
+    expect(result.valid).toBe(false);
     expect(result.days[0]?.nutrition.totals.calories).toBeNull();
     expect(result.days[0]?.nutrition.hasPendingVerification).toBe(true);
+    expect(result.issues.every((issue) => issue.code === "nutrition_record")).toBe(
+      true,
+    );
   });
 
   it("rejects a plan that cannot be matched to its trusted measurement basis", () => {

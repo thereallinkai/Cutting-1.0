@@ -34,8 +34,8 @@ export async function POST(request: Request) {
           full_name: parsed.data.fullName,
           gender: parsed.data.gender,
           age: parsed.data.age,
-          terms_version: "1.0",
-          privacy_version: "1.0",
+          terms_version: "1.1",
+          privacy_version: "1.1",
         },
       },
     });

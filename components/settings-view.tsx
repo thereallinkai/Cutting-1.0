@@ -11,6 +11,7 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
+import { FoodLabelUpload } from "@/components/food-label-upload";
 
 export type SettingsGoalType =
   | "fat_loss"
@@ -57,6 +58,7 @@ type PrivateLabelFood = {
   verificationStatus:
     | "verified"
     | "user_label"
+    | "source_reported"
     | "pending_verification"
     | "unavailable";
   createdAt: string;
@@ -76,7 +78,6 @@ type PendingAction =
   | "profile"
   | "goal"
   | "preferences"
-  | "labelFood"
   | "export"
   | "logout"
   | null;
@@ -89,24 +90,8 @@ type StatusMessage = {
 type SaveResult = {
   saved: boolean;
   persisted: boolean;
-  section: "profile" | "goal" | "preferences" | "labelFood";
+  section: "profile" | "goal" | "preferences";
   displayMetadataUpdated?: boolean;
-  food?: {
-    id: string;
-    english_name: string;
-    verification_status: PrivateLabelFood["verificationStatus"];
-    created_at: string;
-    nutrition: {
-      serving_weight_grams: number;
-      calories: number;
-      protein_g: number;
-      carbohydrate_g: number;
-      fat_g: number;
-      fiber_g: number | null;
-      sodium_mg: number | null;
-      source_reference: string;
-    };
-  };
 };
 
 const sections = [
@@ -143,12 +128,6 @@ function splitList(value: string) {
       seen.add(key);
       return true;
     });
-}
-
-function optionalNumber(value: string) {
-  if (!value.trim()) return null;
-  const number = Number(value);
-  return Number.isFinite(number) ? number : Number.NaN;
 }
 
 async function updateSettings(body: unknown) {
@@ -200,18 +179,7 @@ export function SettingsView({
   const [safetyContext, setSafetyContext] = useState(
     initialData.profile.safetyContext,
   );
-  const [privateLabelFoods, setPrivateLabelFoods] = useState(
-    initialData.privateLabelFoods,
-  );
-  const [productName, setProductName] = useState("");
-  const [servingWeightGrams, setServingWeightGrams] = useState("");
-  const [calories, setCalories] = useState("");
-  const [proteinGrams, setProteinGrams] = useState("");
-  const [carbohydrateGrams, setCarbohydrateGrams] = useState("");
-  const [fatGrams, setFatGrams] = useState("");
-  const [fiberGrams, setFiberGrams] = useState("");
-  const [sodiumMilligrams, setSodiumMilligrams] = useState("");
-  const [sourceNote, setSourceNote] = useState("");
+  const privateLabelFoods = initialData.privateLabelFoods;
   const isDemo = initialData.mode === "demo";
   const savingBlocked = Boolean(initialData.loadError);
 
@@ -219,6 +187,16 @@ export function SettingsView({
     return persisted
       ? authenticatedText
       : "Demo preview updated for this page only. Supabase is not configured, so no account data was saved.";
+  }
+
+  function useDeviceTimeZone() {
+    const detected =
+      Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    setTimeZone(detected);
+    setStatus({
+      kind: "success",
+      text: `Detected ${detected} from this device. Select Save profile to keep it on your account.`,
+    });
   }
 
   async function saveProfile(event: FormEvent<HTMLFormElement>) {
@@ -324,114 +302,6 @@ export function SettingsView({
     }
   }
 
-  async function addLabelFood(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (savingBlocked) return;
-    const parsedServing = optionalNumber(servingWeightGrams);
-    const parsedCalories = optionalNumber(calories);
-    const parsedProtein = optionalNumber(proteinGrams);
-    const parsedCarbohydrate = optionalNumber(carbohydrateGrams);
-    const parsedFat = optionalNumber(fatGrams);
-    const parsedFiber = optionalNumber(fiberGrams);
-    const parsedSodium = optionalNumber(sodiumMilligrams);
-    if (
-      parsedServing === null ||
-      parsedCalories === null ||
-      parsedProtein === null ||
-      parsedCarbohydrate === null ||
-      parsedFat === null
-    ) {
-      setStatus({
-        kind: "error",
-        text:
-          "Enter serving grams, calories, protein, carbohydrate, and fat from the label.",
-      });
-      return;
-    }
-
-    setPending("labelFood");
-    setStatus(null);
-    try {
-      const result = await updateSettings({
-        section: "labelFood",
-        productName,
-        servingWeightGrams: parsedServing,
-        calories: parsedCalories,
-        proteinGrams: parsedProtein,
-        carbohydrateGrams: parsedCarbohydrate,
-        fatGrams: parsedFat,
-        fiberGrams: parsedFiber,
-        sodiumMilligrams: parsedSodium,
-        sourceNote,
-      });
-      const newFood: PrivateLabelFood = result.food
-        ? {
-            id: result.food.id,
-            name: result.food.english_name,
-            verificationStatus: result.food.verification_status,
-            createdAt: result.food.created_at,
-            nutrition: {
-              servingWeightGrams:
-                result.food.nutrition.serving_weight_grams,
-              calories: result.food.nutrition.calories,
-              proteinGrams: result.food.nutrition.protein_g,
-              carbohydrateGrams:
-                result.food.nutrition.carbohydrate_g,
-              fatGrams: result.food.nutrition.fat_g,
-              fiberGrams: result.food.nutrition.fiber_g,
-              sodiumMilligrams: result.food.nutrition.sodium_mg,
-              sourceNote: result.food.nutrition.source_reference,
-            },
-          }
-        : {
-            id: `demo-${Date.now()}`,
-            name: productName.trim(),
-            verificationStatus: "user_label",
-            createdAt: new Date().toISOString(),
-            nutrition: {
-              servingWeightGrams: parsedServing,
-              calories: parsedCalories,
-              proteinGrams: parsedProtein,
-              carbohydrateGrams: parsedCarbohydrate,
-              fatGrams: parsedFat,
-              fiberGrams: parsedFiber,
-              sodiumMilligrams: parsedSodium,
-              sourceNote:
-                sourceNote.trim() ||
-                "Nutrition facts entered in the demo preview.",
-            },
-          };
-      setPrivateLabelFoods((foods) => [...foods, newFood]);
-      setProductName("");
-      setServingWeightGrams("");
-      setCalories("");
-      setProteinGrams("");
-      setCarbohydrateGrams("");
-      setFatGrams("");
-      setFiberGrams("");
-      setSodiumMilligrams("");
-      setSourceNote("");
-      setStatus({
-        kind: "success",
-        text: successMessage(
-          result.persisted,
-          "Private label food and its serving nutrition were saved.",
-        ),
-      });
-      if (result.persisted) router.refresh();
-    } catch (error) {
-      setStatus({
-        kind: "error",
-        text:
-          error instanceof Error
-            ? error.message
-            : "The private label food could not be saved.",
-      });
-    } finally {
-      setPending(null);
-    }
-  }
-
   async function downloadExport() {
     setPending("export");
     setStatus(null);
@@ -452,7 +322,7 @@ export function SettingsView({
       const disposition = response.headers.get("Content-Disposition") ?? "";
       const filename =
         /filename="?([^";]+)"?/i.exec(disposition)?.[1] ??
-        "cutting-plan-data.json";
+        "lets-go-green-data.json";
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
@@ -621,6 +491,21 @@ export function SettingsView({
                   <option value="Asia/Tokyo" />
                   <option value="Australia/Sydney" />
                 </datalist>
+                <div className="field">
+                  <span>Automatic time zone</span>
+                  <button
+                    className="button button-quiet"
+                    disabled={pending !== null}
+                    onClick={useDeviceTimeZone}
+                    type="button"
+                  >
+                    Use this device&apos;s time zone
+                  </button>
+                  <small className="field-help">
+                    Uses the browser&apos;s time-zone setting. Precise location
+                    permission is not requested.
+                  </small>
+                </div>
               </div>
               <div className="section-actions">
                 <button
@@ -834,9 +719,9 @@ export function SettingsView({
               <div>
                 <h2>Private label foods</h2>
                 <p>
-                  Enter serving facts from a branded or variable product instead
-                  of guessing its nutrition. Saved label foods are not yet
-                  eligible for generated plans.
+                  Photograph and transcribe the exact branded product instead of
+                  guessing. Your confirmed private copy can be used in your plan;
+                  any shared barcode copy stays pending until catalog review.
                 </p>
               </div>
             </div>
@@ -866,143 +751,7 @@ export function SettingsView({
               </div>
             )}
 
-            <form onSubmit={addLabelFood}>
-              <div className="field-grid">
-                <label className="field">
-                  <span>Product name</span>
-                  <input
-                    disabled={pending !== null}
-                    maxLength={160}
-                    onChange={(event) => setProductName(event.target.value)}
-                    placeholder="Brand and product"
-                    required
-                    value={productName}
-                  />
-                </label>
-                <label className="field">
-                  <span>Serving weight (g)</span>
-                  <input
-                    disabled={pending !== null}
-                    inputMode="decimal"
-                    min="0.001"
-                    onChange={(event) =>
-                      setServingWeightGrams(event.target.value)
-                    }
-                    required
-                    step="any"
-                    type="number"
-                    value={servingWeightGrams}
-                  />
-                </label>
-                <label className="field">
-                  <span>Calories per serving</span>
-                  <input
-                    disabled={pending !== null}
-                    inputMode="decimal"
-                    min="0"
-                    onChange={(event) => setCalories(event.target.value)}
-                    required
-                    step="any"
-                    type="number"
-                    value={calories}
-                  />
-                </label>
-                <label className="field">
-                  <span>Protein (g)</span>
-                  <input
-                    disabled={pending !== null}
-                    inputMode="decimal"
-                    min="0"
-                    onChange={(event) => setProteinGrams(event.target.value)}
-                    required
-                    step="any"
-                    type="number"
-                    value={proteinGrams}
-                  />
-                </label>
-                <label className="field">
-                  <span>Carbohydrate (g)</span>
-                  <input
-                    disabled={pending !== null}
-                    inputMode="decimal"
-                    min="0"
-                    onChange={(event) =>
-                      setCarbohydrateGrams(event.target.value)
-                    }
-                    required
-                    step="any"
-                    type="number"
-                    value={carbohydrateGrams}
-                  />
-                </label>
-                <label className="field">
-                  <span>Fat (g)</span>
-                  <input
-                    disabled={pending !== null}
-                    inputMode="decimal"
-                    min="0"
-                    onChange={(event) => setFatGrams(event.target.value)}
-                    required
-                    step="any"
-                    type="number"
-                    value={fatGrams}
-                  />
-                </label>
-                <label className="field">
-                  <span>Fiber (g, optional)</span>
-                  <input
-                    disabled={pending !== null}
-                    inputMode="decimal"
-                    min="0"
-                    onChange={(event) => setFiberGrams(event.target.value)}
-                    step="any"
-                    type="number"
-                    value={fiberGrams}
-                  />
-                </label>
-                <label className="field">
-                  <span>Sodium (mg, optional)</span>
-                  <input
-                    disabled={pending !== null}
-                    inputMode="decimal"
-                    min="0"
-                    onChange={(event) =>
-                      setSodiumMilligrams(event.target.value)
-                    }
-                    step="any"
-                    type="number"
-                    value={sodiumMilligrams}
-                  />
-                </label>
-              </div>
-              <label className="field" style={{ marginTop: "1rem" }}>
-                <span>Source note (optional)</span>
-                <textarea
-                  disabled={pending !== null}
-                  maxLength={1000}
-                  onChange={(event) => setSourceNote(event.target.value)}
-                  placeholder="For example: package label checked July 2026."
-                  value={sourceNote}
-                />
-              </label>
-              <p className="field-help">
-                These values are stored as user-entered label data, not
-                independently verified nutrition. They remain unavailable to
-                generated plans until serving-unit conversion and explicit safety
-                metadata are supported.
-              </p>
-              <div className="section-actions">
-                <button
-                  className="button button-dark"
-                  disabled={savingBlocked || pending !== null}
-                  type="submit"
-                >
-                  {pending === "labelFood"
-                    ? "Adding…"
-                    : "Add private label food"}
-                </button>
-              </div>
-            </form>
+            <FoodLabelUpload onCreated={() => router.refresh()} />
           </section>
 
           <section className="card settings-section" id="ai">

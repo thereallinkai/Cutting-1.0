@@ -1,23 +1,29 @@
-# Cutting Plan
+# Let's Go Green!
 
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/thereallinkai/Cutting-1.0?quickstart=1)
 
-Cutting Plan is a calm, safety-aware meal-planning and habit-tracking application. It combines meal guidance, daily meal check-ins, weight-trend tracking, and a versioned plan workflow without presenting estimates as medical facts or guaranteeing a body-weight outcome.
+Let's Go Green! is a calm, safety-aware meal-planning and habit-tracking application. It combines meal guidance, daily meal check-ins, weight-trend tracking, and a versioned plan workflow without presenting estimates as medical facts or guaranteeing a body-weight outcome.
 
 The repository is a single full-stack TypeScript application built with Next.js App Router, React, Tailwind CSS, Supabase PostgreSQL and Auth, a deterministic mock AI provider, an optional server-only OpenAI provider, Vitest, React Testing Library, and Playwright.
 
-> **Wellness and safety:** Cutting Plan provides general wellness information and is not medical advice. Individual needs can vary. Consult a qualified healthcare professional or registered dietitian when appropriate.
+> **Wellness and safety:** Let's Go Green! provides general wellness information and is not medical advice. Individual needs can vary. Consult a qualified healthcare professional or registered dietitian when appropriate.
 
 ## Current feature set
 
 The repository is structured to provide:
 
 - Public landing, login, registration, password-recovery, Terms, and Privacy experiences.
-- Authenticated Today, My Plan, Calendar, Progress, and Settings navigation on desktop and mobile.
+- Authenticated Today, My Plan, Calendar, Progress, Profile, and Settings experiences on desktop and mobile.
 - Resumable onboarding for profile, food preferences, goals, lifestyle, safety context, and review.
-- A searchable food catalog with meal assignment, composition guidance, and nutrition-verification states.
+- A searchable food catalog that distinguishes generic foods from exact brand, product, variant, and GTIN/barcode records.
+- Expandable nutrition facts with energy, macronutrients, available micronutrients, measurement basis, source attribution, and verification status.
+- Authenticated USDA FoodData Central text search and Open Food Facts barcode lookup, with server-side normalization and a pending-review boundary.
+- Private, sanitized nutrition-label photo upload and exact transcription for a user-confirmed personal product; a GTIN can also create one reusable normalized catalog record without sharing the photo evidence.
 - Versioned seven-day plans with an accepted-plan boundary.
-- Daily meal check-ins, local-date weight entries, progress summaries, and rolling trends.
+- Six ordered daily spaces—breakfast, morning snack, lunch, afternoon snack, dinner, and evening snack—with extra-food recording and an explicit skipped state whose reason is optional.
+- A profile reached from the account avatar, automatic device-time-zone initialization without a location permission prompt, a replayable first-run tutorial, and clearly external nearby-shopping links.
+- A green responsive visual system with page/dialog transitions that respect reduced-motion preferences.
+- Local-date weight entries, progress summaries, and rolling trends.
 - Deterministic unit, date, progress, completion, nutrition, filtering, and safety calculations.
 - Local Supabase Auth, PostgreSQL, Row Level Security, migrations, deterministic seed data, Studio, and captured email.
 - Mock-backed plan generation for credential-free development and CI.
@@ -35,22 +41,55 @@ flowchart LR
   D[Deterministic domain logic]
   S[Supabase API and Auth]
   P[(PostgreSQL with RLS)]
+  F[(Private label-photo storage)]
   M[Mock plan provider]
   O[OpenAI Responses API]
+  U[USDA FoodData Central]
+  X[Open Food Facts]
+  G[Google Maps]
   E[Local captured email]
 
   B -->|Pages, forms, same-origin API| N
   N -->|Validated calculations| D
   N -->|User-scoped SSR client| S
   S -->|RLS-enforced queries| P
+  S -->|Owner-scoped metadata| F
   S -->|Development messages| E
   N -->|Default local and CI mode| M
   N -. Explicit server-only opt-in .-> O
+  N -->|Server-side text lookup| U
+  N -->|Server-side barcode lookup| X
+  B -. Clearly labeled external search .-> G
 ```
 
 The browser uses same-origin Next.js pages, Route Handlers, and Server Actions. Protected operations resolve the authenticated user on the server and use a user-scoped Supabase client so Row Level Security remains active. Server-only provider code loads trusted profile data from PostgreSQL; the browser never sends an arbitrary trusted profile snapshot to OpenAI.
 
 Deterministic code—not a language model—owns unit conversion, timeline math, progress, completion, rolling averages, nutrition totals, food filtering, data-sufficiency states, and safety flags. AI output is a suggestion that must reference allowed food IDs, pass validation, and be recalculated before a complete plan version can be saved.
+
+### Food catalog, nutrition, and label-photo trust boundaries
+
+| Data path | What is stored or displayed | Trust and plan boundary |
+| --- | --- | --- |
+| Reviewed local catalog | Generic foods or exact products, measurement basis, nutrition, safety metadata, and provenance | Eligible only when the required nutrition and safety records have the reviewed statuses enforced by the database |
+| USDA FoodData Central | Text-search candidates and a server-refetched normalized record | Labeled source-reported and `pending_review`; searchable and loggable, but not eligible for generated plans until reviewed |
+| Open Food Facts | An exact 8–14 digit barcode lookup and a server-refetched normalized product | Community-source data with attribution, labeled source-reported and `pending_review`; not eligible for generated plans until reviewed |
+| Uploaded package label | A server-re-encoded, owner-private JPEG/PNG plus the account owner's exact transcription | The original upload is not retained as-is; confirmation requires sanitized nutrition-label evidence and creates an active `user_label` personal product for that owner, not an independently reviewed record |
+| Label with a GTIN | A normalized shared catalog record keyed by the barcode | Reusable in catalog search and daily logging as `pending_review`; the private photo evidence and owner-private personal product are never published to other accounts |
+
+Nutrition cards preserve the stated basis—such as raw, dry, cooked, as sold, per 100 g, or one label serving—and show only values actually present in the stored source. Calories, energy in kilojoules, protein, carbohydrate, fat, fiber, sodium, saturated and trans fat, sugars, cholesterol, potassium, calcium, iron, vitamin D, and additional provider-reported nutrients can be displayed when available. A missing nutrient remains missing; it is never filled by a guess.
+
+The deterministic broccoli, spinach, romaine lettuce, carrot, and tomato records
+include the conventional nutrition summary plus 19 additional nutrients from
+their exact USDA FDC records. Label confirmation separately requires an
+explicit allergen review, an explicit dietary-restriction review, and a
+nutrition photo. Known allergen words in the package statement must match the
+selected allergen mappings. Image attempts are rate-limited, and uploading the
+same evidence kind replaces the current private image rather than accumulating
+unbounded copies.
+
+Google Search and ChatGPT are not nutrition sources for this application. Google Maps links are shopping conveniences only: they open an external search, may use Google's own location settings, and do not prove product inventory, price, availability, or suitability.
+
+The initial time zone comes from the browser's standard device time-zone setting through `Intl.DateTimeFormat`; Let's Go Green! does not request precise geolocation for that step. The user can review or change the saved IANA time zone in Settings.
 
 ## Development environment strategy
 
@@ -69,8 +108,8 @@ The recommended Codespaces machine has at least 4 CPU cores, 8 GB memory, and 32
 
 1. Select the badge above or use **Code → Codespaces → Create codespace**. A repository branch, feature branch, or pull-request branch can be opened in its own Codespace.
 2. Wait for the Dev Container `postCreateCommand`. It runs `npm run bootstrap`, which installs the exact lockfile and prepares the credential-free local stack.
-3. Run **Terminal → Run Task → Start Cutting Plan**. The same action is available from the Command Palette as **Tasks: Run Task**.
-4. Open the privately forwarded **Cutting Plan** port when VS Code prompts.
+3. Run **Terminal → Run Task → Start Let's Go Green!**. The same action is available from the Command Palette as **Tasks: Run Task**.
+4. Open the privately forwarded **Let's Go Green!** port when VS Code prompts.
 
 The application, Supabase API, PostgreSQL, Supabase Studio, and captured-email ports are private by default. Bootstrap derives the application origin and exact Supabase Auth callback from Codespaces runtime variables without embedding a GitHub domain literal. Use the Codespaces **Ports** panel to open Studio or captured email instead of copying a forwarded-domain pattern into configuration.
 
@@ -91,7 +130,7 @@ Then:
 2. Open the repository folder in VS Code.
 3. Select **Dev Containers: Reopen in Container**.
 4. Wait for bootstrap to complete.
-5. Run the **Start Cutting Plan** task if it did not already start.
+5. Run the **Start Let's Go Green!** task if it did not already start.
 6. Open the forwarded application URL.
 
 No host installation of Node.js, npm packages, PostgreSQL, Supabase CLI, or Playwright is used by this path.
@@ -121,7 +160,7 @@ Rerunning bootstrap does not reset the database, duplicate deterministic seed re
 
 | Service | Default container URL | Forwarded port | Notes |
 | --- | --- | ---: | --- |
-| Cutting Plan | `http://localhost:3000` | 3000 | Next.js application |
+| Let's Go Green! | `http://localhost:3000` | 3000 | Next.js application |
 | Supabase API | `http://127.0.0.1:54321` | 54321 | Browser and server API |
 | PostgreSQL | `postgresql://…@127.0.0.1:54322/postgres` | 54322 | Local development database |
 | Supabase Studio | `http://127.0.0.1:54323` | 54323 | Local database UI |
@@ -134,6 +173,25 @@ The generated `.env.local` contains local-only values from `supabase status -o e
 Supabase Auth sends development signup, verification, and password-reset messages to the Supabase CLI local email-capture service (Mailpit in the pinned CLI). Open the **Local captured email** forwarded port, select the message for the test address, and use the current verification code or reset link.
 
 This verifies the local Supabase email flow. It does not test a production SMTP provider, production sender reputation, or a hosted redirect configuration.
+
+### External food lookup configuration
+
+Exact-product lookup runs on the server. Add these values to the ignored `.env.local` file or the appropriate secure runtime store, never to a `NEXT_PUBLIC_*` variable:
+
+```dotenv
+# Server-only data.gov key for USDA FoodData Central.
+USDA_FDC_API_KEY=
+
+# Descriptive application identity sent to food-data providers.
+FOOD_LOOKUP_USER_AGENT=LetsGoGreen/0.1 (https://github.com/thereallinkai/Cutting-1.0)
+```
+
+- `USDA_FDC_API_KEY` is optional for local development because non-production mode can use the USDA `DEMO_KEY`. That shared key is rate-limited and is not a production configuration. Obtain and secure a data.gov key before relying on USDA lookup in a deployed environment.
+- `FOOD_LOOKUP_USER_AGENT` is not a secret, but it must be a descriptive value of at least eight characters. The committed default identifies this repository.
+- Open Food Facts barcode lookup does not require a key. Both providers require outbound network access and can be unavailable, incomplete, or rate-limited.
+- Search results are candidates only. Import refetches the selected provider record on the server, stores provenance and a source snapshot, and marks the normalized record `pending_review`.
+
+Provider configuration expands the catalog; it does not turn source-reported data into reviewed nutrition or make a pending record eligible for generated plans.
 
 ## Mock and real AI modes
 
@@ -198,6 +256,15 @@ The endpoint does not expose keys, connection strings, internal tokens, raw prov
 
 Migrations under `supabase/migrations/` are the source of truth. Do not edit a migration that may already have been applied.
 
+The product, package, documentation, container labels, environment variables,
+browser-storage keys, exports, and current runtime identifiers use **Let's Go
+Green!**. Two hidden legacy identifiers intentionally remain compatible:
+the original migration filename/history and Supabase `project_id`. Renaming
+either would make an existing local database look unapplied or detach its
+preserved Docker volumes. Old browser-storage and Auth-redirect keys are read
+only long enough to migrate existing local drafts/configuration to the new
+names.
+
 For a schema change:
 
 ```bash
@@ -242,12 +309,12 @@ npm run verify
 
 Current automated coverage includes:
 
-- Unit coverage of conversions, dates, time zones, progress direction, missing data, trends, meal guidance, nutrition basis, filtering, safety, plan mapping, schema validation, and idempotency.
-- Component coverage of authentication controls; onboarding draft restoration, validation, food selection, warning acknowledgement, private-label eligibility, reordering, and removal; plan version review and restore; progress ranges and deletion confirmation; weight persistence rollback; and Today check-in desired-state rollback.
-- Real local database coverage of schema and seed invariants, constraints, catalog visibility, private ownership, cross-user RLS denial, and atomic application RPCs.
-- Playwright coverage of public and legal navigation, Today desired-state submission, mock-plan generation and acceptance, mobile primary navigation, horizontal overflow at 375/768/1280/1440 pixels, and axe scans across the landing page and all protected mock pages.
+- Unit coverage of conversions, dates, time zones, progress direction, missing data, trends, six-slot meal normalization, meal guidance, nutrition basis, filtering, safety, plan mapping, schema validation, and idempotency.
+- Component coverage of authentication controls; onboarding draft restoration, validation, food selection, warning acknowledgement, reordering, and removal; plan version review and restore; progress ranges and deletion confirmation; Today and Calendar snack/skip behavior; profile and tutorial controls; weight persistence rollback; and optimistic-save rollback.
+- Real local database coverage of schema and seed invariants, constraints, catalog and pending-record visibility, private ownership, cross-user RLS denial, snack and skipped-meal persistence, and atomic application RPCs.
+- Playwright coverage of public and legal navigation, protected mock pages, Today persistence, mock-plan generation and acceptance, mobile primary navigation, horizontal overflow at 375/768/1280/1440 pixels, and axe scans.
 
-Authentication email, OTP, full onboarding, calendar persistence, weight edit and deletion, two-user browser isolation, keyboard-only critical-flow, and multi-viewport visual coverage remain explicit roadmap work. Do not treat the smaller mock-backed browser suite as evidence that those flows have passed.
+Authentication email, OTP, the complete external-provider and photo-upload workflows, full onboarding, two-user browser isolation, keyboard-only critical flow, and production-provider behavior still require the hands-on checks in `MANUAL_TESTING.md`. Do not treat a narrower mock-backed browser suite as evidence that those flows or any production integration have passed.
 
 The default suite never spends OpenAI credits. A protected GitHub Actions `workflow_dispatch` can run `openai:smoke` only after a reviewer enables the `openai-smoke` environment and provides its server secret. Report that test as passed, failed, or skipped; never collapse a skip into a pass.
 
@@ -286,7 +353,7 @@ The multi-stage production `Dockerfile`:
 Build it only after production runtime validation and the production build pass:
 
 ```bash
-docker build --tag cutting-plan:local .
+docker build --tag lets-go-green:local .
 ```
 
 The recommended hosted architecture is Vercel for Next.js, hosted Supabase for PostgreSQL and Auth, a production SMTP provider for authentication email, and the OpenAI API from server-only code. The application is hosting-provider neutral; the container can run on another platform that supports Node and secure runtime environment variables.
@@ -310,8 +377,8 @@ Commit variable names and safe examples only. Use separate stores for:
 | Context | Store | Examples |
 | --- | --- | --- |
 | Local mock development | Generated ignored `.env.local` | Local Supabase values and mock mode |
-| Optional developer credentials | GitHub Codespaces secrets | A personal, explicitly enabled test key |
-| Protected automation | GitHub Actions secrets and Environments | Real smoke or deployment credentials |
+| Optional developer credentials | GitHub Codespaces secrets | A personal USDA key or explicitly enabled OpenAI test key |
+| Protected automation | GitHub Actions secrets and Environments | Real provider smoke or deployment credentials |
 | Preview hosting | Vercel Preview environment values | Preview Supabase URL and server credentials |
 | Production hosting | Vercel Production environment values | Production Supabase and OpenAI server values |
 | Auth email | Supabase and SMTP provider secret stores | SMTP password and sender configuration |
@@ -323,9 +390,11 @@ Never commit API keys, access tokens, database passwords, production credential 
 - Hosted Supabase, production SMTP, Vercel, domains, billing, production monitoring, and production secrets are intentionally not configured.
 - Local captured email demonstrates development authentication only.
 - Mock AI is the default. A real OpenAI result is not claimed until the protected opt-in smoke test actually runs.
-- Clean Codespaces and Dev Container acceptance still require running the documented checklist in an environment where Docker is available.
-- Real email/OTP authentication, cookie, password-reset, and full onboarding browser acceptance still requires that Docker-backed environment; the current host could not run it.
-- Private nutrition-label foods are stored honestly but are not yet eligible for generated plans until serving-unit conversion and explicit allergen/restriction metadata are supported.
+- Clean Codespaces and Dev Container acceptance, email/OTP, cookies, password reset, onboarding, external lookup, and label upload must be verified in the target environment with the documented checklist; repository code alone is not production acceptance.
+- USDA development lookup can use the shared `DEMO_KEY`, which has restrictive rate limits. A deployed environment needs its own secured `USDA_FDC_API_KEY`.
+- USDA and Open Food Facts values are source-reported, can be incomplete, and enter the shared catalog as `pending_review`. No external import is automatically approved for generated plans.
+- A confirmed personal label product is eligible only for its owner and remains labeled `user_label`. A barcode-derived shared record remains pending review; its re-encoded photo evidence remains private.
+- Nearby Google Maps links do not verify inventory, price, availability, distance, or product suitability. Google Search and ChatGPT are not nutrition truth.
 - Account export is implemented, but account deletion remains visibly unavailable until a reviewed deletion and retention procedure is implemented.
 - Plan meals show conservative per-meal nutrition where supported; the UI does not yet claim an authoritative summed daily plan total.
 - Production deployment requires one-time provider authorization and a reviewed migration/recovery process.
@@ -397,7 +466,10 @@ Back up anything needed, then run `npm run db:reset` and enter the exact confirm
 - Use neutral, nonjudgmental language. A missed meal or check-in is simply `Not marked`.
 - Clearly distinguish `Provided by you`, `Calculated by the app`, `Suggested by AI`, and `Pending verification`.
 - Preserve raw, dry, cooked, as-sold, and label-serving measurement bases.
-- Never invent nutrition values for an unspecified branded or variable product.
+- Identify branded foods by exact brand, product, variant, and GTIN when available; never invent nutrition for an unspecified branded or variable product.
+- Display source attribution and review status beside source-reported nutrition. Provider availability is not evidence quality.
+- Re-encode uploaded label photos, keep the sanitized evidence owner-private, and share only a normalized pending catalog record when a stable GTIN supports reuse.
+- Use device time-zone settings without treating a time zone as precise location. Label external shopping links and make no inventory claim.
 - Treat safety questions as optional unless functionally required and explain why they are requested.
 - Do not generate aggressive restriction advice for a minor, pregnancy or nursing, an eating-disorder history, relevant medical concerns, or reported symptoms such as dizziness, fainting, heart palpitations, or severe weakness.
 - Encourage appropriate professional guidance without diagnosing.
@@ -406,8 +478,8 @@ Back up anything needed, then run `npm run db:reset` and enter the exact confirm
 ## Roadmap
 
 1. Complete clean Codespaces and local Dev Container acceptance from the GitHub repository.
-2. Expand automated authentication, onboarding, RLS, responsive, keyboard, and accessibility coverage.
-3. Review nutrition sources and verification dates for the public catalog.
+2. Expand automated authentication, onboarding, external-provider, label-upload, RLS, responsive, keyboard, and accessibility coverage.
+3. Establish a reviewed moderation workflow for pending external and normalized label records, including nutrition-source refresh dates.
 4. Exercise the protected real-provider smoke path with explicit credentials and a budget limit.
 5. Configure an isolated preview environment and production provider accounts.
 6. Perform security, privacy, accessibility, recovery, and deployment reviews before inviting real users.

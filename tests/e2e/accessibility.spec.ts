@@ -19,6 +19,23 @@ async function expectNoHighImpactViolations(page: Page) {
   ).toEqual([]);
 }
 
+async function expectNoHorizontalOverflow(page: Page, context: string) {
+  const horizontalOverflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - window.innerWidth,
+  );
+  expect(horizontalOverflow, `horizontal overflow: ${context}`).toBeLessThanOrEqual(
+    1,
+  );
+}
+
+async function waitForProductTourController(page: Page) {
+  await expect(
+    page.locator(
+      '[data-product-tour-controller][data-hydrated="true"]',
+    ),
+  ).toBeAttached();
+}
+
 test("public layout is usable and free of high-impact axe violations at required widths", async ({
   page,
 }) => {
@@ -26,10 +43,7 @@ test("public layout is usable and free of high-impact axe violations at required
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/");
     await expect(page.getByRole("main")).toBeVisible();
-    const horizontalOverflow = await page.evaluate(
-      () => document.documentElement.scrollWidth - window.innerWidth,
-    );
-    expect(horizontalOverflow, `horizontal overflow at ${width}px`).toBeLessThanOrEqual(1);
+    await expectNoHorizontalOverflow(page, `public page at ${width}px`);
     await expectNoHighImpactViolations(page);
   }
 });
@@ -38,9 +52,65 @@ test("protected mock pages have no serious or critical axe violations", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
-  for (const path of ["/today", "/plan", "/calendar", "/progress", "/settings"]) {
+  for (const path of [
+    "/today",
+    "/plan",
+    "/calendar",
+    "/progress",
+    "/profile",
+    "/settings",
+  ]) {
     await page.goto(path);
     await expect(page.getByRole("main")).toBeVisible();
     await expectNoHighImpactViolations(page);
   }
+});
+
+test("Today, Profile, and the tutorial reflow at required widths", async ({
+  page,
+}) => {
+  for (const width of [375, 768, 1280, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+
+    await page.goto("/today");
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Good morning, Jamie." }),
+    ).toBeVisible();
+    await expectNoHorizontalOverflow(page, `Today at ${width}px`);
+
+    await page.goto("/profile");
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Jamie Rivera" }),
+    ).toBeVisible();
+    await expectNoHorizontalOverflow(page, `Profile at ${width}px`);
+
+    await waitForProductTourController(page);
+    await page.getByRole("link", { name: "Replay tutorial" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator(".tour-progress span")).toHaveCount(6);
+    await expectNoHorizontalOverflow(page, `tutorial at ${width}px`);
+    await expectNoHighImpactViolations(page);
+    await dialog
+      .getByRole("button", { name: "Skip tutorial for now" })
+      .click();
+  }
+});
+
+test("tutorial actions remain reachable in a short mobile viewport", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 375, height: 420 });
+  await page.goto("/profile");
+  await waitForProductTourController(page);
+  await page.getByRole("link", { name: "Replay tutorial" }).click();
+
+  const dialog = page.getByRole("dialog");
+  for (let step = 1; step < 6; step += 1) {
+    await dialog.getByRole("button", { name: /Next/ }).click();
+  }
+  await expect(
+    dialog.getByRole("button", { name: /Finish tutorial/ }),
+  ).toBeInViewport();
+  await expectNoHorizontalOverflow(page, "tutorial at 375x420");
 });

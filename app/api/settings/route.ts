@@ -43,26 +43,10 @@ const preferencesSchema = z
   })
   .strict();
 
-const labelFoodSchema = z
-  .object({
-    section: z.literal("labelFood"),
-    productName: z.string().trim().min(1).max(160),
-    servingWeightGrams: z.number().positive().max(10000),
-    calories: z.number().min(0).max(10000),
-    proteinGrams: z.number().min(0).max(10000),
-    carbohydrateGrams: z.number().min(0).max(10000),
-    fatGrams: z.number().min(0).max(10000),
-    fiberGrams: z.number().min(0).max(10000).nullable(),
-    sodiumMilligrams: z.number().min(0).max(1000000).nullable(),
-    sourceNote: z.string().trim().max(1000),
-  })
-  .strict();
-
 const settingsUpdateSchema = z.discriminatedUnion("section", [
   profileSchema,
   goalSchema,
   preferencesSchema,
-  labelFoodSchema,
 ]);
 
 function uniqueItems(items: string[]) {
@@ -73,19 +57,6 @@ function uniqueItems(items: string[]) {
     seen.add(key);
     return true;
   });
-}
-
-function privateFoodSlug(productName: string) {
-  const normalized = productName
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLocaleLowerCase("en-US")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 80)
-    .replace(/-$/g, "");
-  const prefix = normalized || "label-food";
-  return `${prefix}-${crypto.randomUUID().slice(0, 8)}`;
 }
 
 export async function PATCH(request: Request) {
@@ -226,81 +197,7 @@ export async function PATCH(request: Request) {
       });
     }
 
-    const sourceReference =
-      parsed.data.sourceNote ||
-      "Nutrition facts entered by the account owner.";
-    const { data: food, error: foodError } = await supabase
-      .from("foods")
-      .insert({
-        slug: privateFoodSlug(parsed.data.productName),
-        english_name: parsed.data.productName,
-        icon_ref: "package",
-        source: "User-entered nutrition label",
-        ownership_type: "private",
-        owner_user_id: auth.user.id,
-        verification_status: "user_label",
-      })
-      .select(
-        "id,english_name,slug,verification_status,created_at",
-      )
-      .single();
-    if (foodError || !food) {
-      return apiError(
-        "LABEL_FOOD_SAVE_FAILED",
-        "The private label food could not be created.",
-        500,
-      );
-    }
-
-    const { data: nutrition, error: nutritionError } = await supabase
-      .from("food_nutrition")
-      .insert({
-        food_id: food.id,
-        measurement_basis: "label_serving",
-        reference_quantity: 1,
-        reference_unit: "serving",
-        serving_weight_grams: parsed.data.servingWeightGrams,
-        calories: parsed.data.calories,
-        protein_g: parsed.data.proteinGrams,
-        carbohydrate_g: parsed.data.carbohydrateGrams,
-        fat_g: parsed.data.fatGrams,
-        fiber_g: parsed.data.fiberGrams,
-        sodium_mg: parsed.data.sodiumMilligrams,
-        source_name: "User-entered nutrition label",
-        source_reference: sourceReference,
-        verification_status: "user_label",
-      })
-      .select(
-        "id,serving_weight_grams,calories,protein_g,carbohydrate_g,fat_g,fiber_g,sodium_mg,source_reference",
-      )
-      .single();
-    if (nutritionError || !nutrition) {
-      const { error: cleanupError } = await supabase
-        .from("foods")
-        .delete()
-        .eq("id", food.id)
-        .eq("owner_user_id", auth.user.id);
-      return apiError(
-        "LABEL_NUTRITION_SAVE_FAILED",
-        cleanupError
-          ? "Nutrition could not be saved. The incomplete private food may still be visible; reload before trying again."
-          : "Nutrition could not be saved, so the new private food was removed.",
-        500,
-      );
-    }
-
-    return apiSuccess(
-      {
-        saved: true,
-        persisted: true,
-        section: "labelFood" as const,
-        food: {
-          ...food,
-          nutrition,
-        },
-      },
-      201,
-    );
+    return apiError("INVALID_SETTINGS", "That settings section is not supported.", 422);
   } catch {
     return apiError(
       "SERVICE_UNAVAILABLE",

@@ -1,4 +1,4 @@
-export const PLAN_PROMPT_VERSION = "cutting-plan-plan-v1";
+export const PLAN_PROMPT_VERSION = "lets-go-green-plan-v2";
 
 export const PLAN_SYSTEM_INSTRUCTIONS = `
 You arrange a seven-day general-wellness meal plan from an application-controlled

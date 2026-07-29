@@ -1,0 +1,155 @@
+import type { Metadata } from "next";
+import { redirect } from "next/navigation";
+import { PageLoadError } from "@/components/page-load-error";
+import {
+  ProfileView,
+  type ProfileViewData,
+} from "@/components/profile-view";
+import { isDevelopmentDemo } from "@/src/lib/env";
+import { createSupabaseServerClient } from "@/src/lib/supabase/server";
+
+export const metadata: Metadata = { title: "Profile" };
+
+function profileLoadError() {
+  return (
+    <PageLoadError
+      title="Your profile could not be loaded."
+      message="Some stored profile details are unavailable. Reload before relying on or editing this information."
+      retryHref="/profile"
+      retryLabel="Reload Profile"
+    />
+  );
+}
+
+const demoProfile: ProfileViewData = {
+  mode: "demo",
+  account: {
+    email: "demo@letsgogreen.local",
+    createdAt: "2026-07-24T12:00:00Z",
+  },
+  profile: {
+    fullName: "Jamie Rivera",
+    age: 31,
+    gender: "prefer_not_to_say",
+    heightCm: 172,
+    preferredWeightUnit: "kg",
+    timeZone: "America/New_York",
+    activityLevel: "moderately_active",
+    trainingDaysPerWeek: 3,
+    allergies: ["Peanuts"],
+    dietaryRestrictions: [],
+    dislikedFoods: ["Mushrooms"],
+    hasSafetyContext: false,
+    onboardingCompletedAt: "2026-07-24T12:00:00Z",
+  },
+  goal: {
+    goalType: "fat_loss",
+    targetWeightKg: 72,
+    targetDate: "2026-10-16",
+  },
+  latestWeightKg: 80.7,
+  mealPreferenceCount: 9,
+  preferredFoods: [
+    "Rolled oats",
+    "Greek yogurt",
+    "Blueberries",
+    "Brown rice",
+  ],
+};
+
+export default async function ProfilePage() {
+  if (isDevelopmentDemo()) return <ProfileView data={demoProfile} />;
+
+  const supabase = await createSupabaseServerClient();
+  const { data: auth, error: authError } = await supabase.auth.getUser();
+  if (authError || !auth.user) redirect("/login");
+
+  const [profileResult, goalResult, latestWeightResult, preferenceCountResult] =
+    await Promise.all([
+      supabase
+        .from("profiles")
+        .select(
+          "full_name,age,gender,height_cm,preferred_weight_unit,time_zone,activity_level,training_days_per_week,allergies,dietary_restrictions,disliked_foods,safety_context,onboarding_completed_at",
+        )
+        .eq("user_id", auth.user.id)
+        .maybeSingle(),
+      supabase
+        .from("goals")
+        .select("goal_type,target_weight_kg,target_date")
+        .eq("user_id", auth.user.id)
+        .eq("status", "active")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from("weight_entries")
+        .select("weight_kg")
+        .eq("user_id", auth.user.id)
+        .order("local_date", { ascending: false })
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from("meal_preferences")
+        .select("food:foods(english_name)", { count: "exact" })
+        .eq("user_id", auth.user.id)
+        .order("meal_type")
+        .order("sort_order")
+        .limit(12),
+    ]);
+  if (
+    profileResult.error ||
+    goalResult.error ||
+    latestWeightResult.error ||
+    preferenceCountResult.error
+  ) {
+    return profileLoadError();
+  }
+
+  const profile = profileResult.data;
+  const goal = goalResult.data;
+  const data: ProfileViewData = {
+    mode: "authenticated",
+    account: {
+      email: auth.user.email ?? "Email unavailable",
+      createdAt: auth.user.created_at,
+    },
+    profile: {
+      fullName:
+        profile?.full_name ??
+        String(auth.user.user_metadata.full_name ?? "Member"),
+      age: profile?.age ?? null,
+      gender: profile?.gender ?? null,
+      heightCm: profile?.height_cm ?? null,
+      preferredWeightUnit: profile?.preferred_weight_unit ?? "kg",
+      timeZone: profile?.time_zone ?? "UTC",
+      activityLevel: profile?.activity_level ?? null,
+      trainingDaysPerWeek: profile?.training_days_per_week ?? null,
+      allergies: profile?.allergies ?? [],
+      dietaryRestrictions: profile?.dietary_restrictions ?? [],
+      dislikedFoods: profile?.disliked_foods ?? [],
+      hasSafetyContext: Boolean(profile?.safety_context),
+      onboardingCompletedAt: profile?.onboarding_completed_at ?? null,
+    },
+    goal: goal
+      ? {
+          goalType: goal.goal_type,
+          targetWeightKg: goal.target_weight_kg,
+          targetDate: goal.target_date,
+        }
+      : null,
+    latestWeightKg: latestWeightResult.data?.weight_kg ?? null,
+    mealPreferenceCount: preferenceCountResult.count ?? 0,
+    preferredFoods: [
+      ...new Set(
+        (preferenceCountResult.data ?? []).flatMap((preference) =>
+          preference.food?.english_name
+            ? [preference.food.english_name]
+            : [],
+        ),
+      ),
+    ],
+  };
+
+  return <ProfileView data={data} />;
+}

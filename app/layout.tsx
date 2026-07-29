@@ -1,26 +1,39 @@
 import type { Metadata, Viewport } from "next";
+import { BRAND } from "@/src/lib/brand";
 import "./globals.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"),
   title: {
-    default: "Cutting Plan — Steady guidance for everyday meals",
-    template: "%s — Cutting Plan",
+    default: `${BRAND.name} — Steady guidance for everyday meals`,
+    template: `%s — ${BRAND.name}`,
   },
-  description:
-    "A calm meal-planning and habit-tracking companion with transparent estimates, daily check-ins, and weight-trend context.",
-  applicationName: "Cutting Plan",
-  icons: { icon: "/favicon.png", shortcut: "/favicon.png" },
+  description: BRAND.description,
+  applicationName: BRAND.name,
+  icons: {
+    icon: [
+      { url: "/favicon.svg", type: "image/svg+xml" },
+      { url: "/favicon.png", type: "image/png", sizes: "128x128" },
+    ],
+    shortcut: "/favicon.png",
+  },
   openGraph: {
     type: "website",
-    title: "Cutting Plan",
-    description: "Plan meals. Notice patterns. Adjust with care.",
-    images: [{ url: "/og.png", width: 1200, height: 630, alt: "Cutting Plan — Plan meals. Notice patterns. Adjust with care." }],
+    title: BRAND.name,
+    description: BRAND.tagline,
+    images: [
+      {
+        url: "/og.png",
+        width: 1200,
+        height: 630,
+        alt: `${BRAND.name} — ${BRAND.tagline}`,
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Cutting Plan",
-    description: "Plan meals. Notice patterns. Adjust with care.",
+    title: BRAND.name,
+    description: BRAND.tagline,
     images: ["/og.png"],
   },
 };
@@ -28,7 +41,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#f4f1e9",
+  themeColor: "#edf7ee",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

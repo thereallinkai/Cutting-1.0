@@ -1,0 +1,31 @@
+{
+  "status": "success",
+  "product": {
+    "code": "1234567890123",
+    "product_name_en": "Vegetable Greens Powder",
+    "brands": "Example Greens",
+    "quantity": "300 g",
+    "serving_size": "10 g",
+    "ingredients_text_en": "Spinach powder, broccoli powder.",
+    "allergens": "None stated on package.",
+    "countries_tags": ["en:united-states"],
+    "categories_tags": ["en:vegetable-powders", "en:dietary-supplements"],
+    "last_modified_t": 1750000000,
+    "nutriments": {
+      "energy-kcal_100g": 300,
+      "energy-kcal_unit": "kcal",
+      "energy-kj_100g": 1255,
+      "energy-kj_unit": "kJ",
+      "proteins_100g": 20,
+      "proteins_unit": "g",
+      "carbohydrates_100g": 50,
+      "carbohydrates_unit": "g",
+      "fat_100g": 5,
+      "fat_unit": "g",
+      "fiber_100g": 15,
+      "fiber_unit": "g",
+      "sodium_100g": 0.2,
+      "sodium_unit": "g"
+    }
+  }
+}

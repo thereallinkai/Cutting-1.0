@@ -6,10 +6,10 @@ import {
   CalendarDays,
   ChartNoAxesCombined,
   ClipboardList,
-  Leaf,
   Settings,
   SunMedium,
 } from "lucide-react";
+import { BrandLink } from "@/components/brand-link";
 
 const items = [
   { href: "/today", label: "Today", icon: SunMedium },
@@ -41,30 +41,58 @@ function NavigationLinks({ mobile = false }: { mobile?: boolean }) {
   );
 }
 
+function initialsFor(name: string) {
+  return (
+    name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0])
+      .join("")
+      .toUpperCase() || "LG"
+  );
+}
+
 export function Sidebar({ email, name }: { email: string; name: string }) {
-  const initials = name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join("")
-    .toUpperCase();
+  const pathname = usePathname();
+  const initials = initialsFor(name);
+  const profileActive =
+    pathname === "/profile" || pathname.startsWith("/profile/");
   return (
     <aside className="sidebar">
-      <Link className="brand" href="/today">
-        <span className="brand-mark" aria-hidden="true"><Leaf size={19} /></span>
-        Cutting Plan
-      </Link>
+      <BrandLink href="/today" />
       <NavigationLinks />
       <div className="sidebar-footer">
-        <div className="profile-chip">
-          <span className="avatar" aria-hidden="true">{initials || "CP"}</span>
+        <Link
+          aria-current={profileActive ? "page" : undefined}
+          aria-label={`Open profile for ${name}`}
+          className={`profile-chip${profileActive ? " active" : ""}`}
+          data-tour="profile"
+          href="/profile"
+        >
+          <span className="avatar" aria-hidden="true">{initials}</span>
           <div>
             <strong>{name}</strong>
             <small>{email}</small>
           </div>
-        </div>
+        </Link>
       </div>
     </aside>
+  );
+}
+
+export function MobileHeader({ name }: { name: string }) {
+  return (
+    <header className="mobile-app-header">
+      <BrandLink href="/today" />
+      <Link
+        className="mobile-profile-link"
+        href="/profile"
+        aria-label={`Open profile for ${name}`}
+      >
+        <span className="avatar" aria-hidden="true">{initialsFor(name)}</span>
+      </Link>
+    </header>
   );
 }
 

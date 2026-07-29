@@ -61,6 +61,13 @@ export function validatePlanNutritionRanges(
       days.push({ dayIndex: day.dayIndex, nutrition });
 
       const calories = nutrition.totals.calories;
+      if (ranges.energyKcal && calories === null) {
+        issues.push({
+          dayIndex: day.dayIndex,
+          code: "nutrition_record",
+          message: `Day ${day.dayIndex} energy could not be recalculated from complete trusted nutrition records.`,
+        });
+      }
       if (
         calories !== null &&
         ranges.energyKcal &&
@@ -74,6 +81,13 @@ export function validatePlanNutritionRanges(
       }
 
       const protein = nutrition.totals.proteinGrams;
+      if (ranges.proteinGrams && protein === null) {
+        issues.push({
+          dayIndex: day.dayIndex,
+          code: "nutrition_record",
+          message: `Day ${day.dayIndex} protein could not be recalculated from complete trusted nutrition records.`,
+        });
+      }
       if (
         protein !== null &&
         ranges.proteinGrams &&

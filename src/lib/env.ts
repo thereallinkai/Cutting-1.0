@@ -19,6 +19,15 @@ const serverEnvSchema = publicEnvSchema.extend({
     .min(1_000)
     .max(120_000)
     .default(30_000),
+  USDA_FDC_API_KEY: z.string().trim().min(1).optional(),
+  FOOD_LOOKUP_USER_AGENT: z
+    .string()
+    .trim()
+    .min(8)
+    .max(300)
+    .default(
+      "LetsGoGreen/0.1 (https://github.com/thereallinkai/Cutting-1.0)",
+    ),
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
   DATABASE_URL: z.string().optional(),
 });
@@ -39,6 +48,8 @@ export function getServerEnv() {
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
     OPENAI_MODEL: process.env.OPENAI_MODEL,
     OPENAI_REQUEST_TIMEOUT_MS: process.env.OPENAI_REQUEST_TIMEOUT_MS,
+    USDA_FDC_API_KEY: process.env.USDA_FDC_API_KEY,
+    FOOD_LOOKUP_USER_AGENT: process.env.FOOD_LOOKUP_USER_AGENT,
     SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
     DATABASE_URL: process.env.DATABASE_URL,
   });

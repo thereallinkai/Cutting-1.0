@@ -6,6 +6,12 @@ export type ParsedOptionalHeight =
   | { ok: true; heightCm: number | null }
   | { ok: false; heightCm: null };
 
+export type ParsedWeight =
+  | { ok: true; weightKg: number }
+  | { ok: false; weightKg: null };
+
+const LB_PER_KG = 2.2046226218;
+
 function validHeightCm(heightCm: number) {
   return Number.isFinite(heightCm) && heightCm >= 50 && heightCm <= 300;
 }
@@ -51,6 +57,31 @@ export function parseOptionalHeight(value: string): ParsedOptionalHeight {
   if (inchesOnly) return acceptedHeight(Number(inchesOnly[1]) * 2.54);
 
   return { ok: false, heightCm: null };
+}
+
+/**
+ * Parses the reviewed weight string using the reviewed display unit.
+ * The server uses this result instead of trusting a separately supplied
+ * converted value.
+ */
+export function parseWeightKg(
+  value: string,
+  unit: "kg" | "lb",
+): ParsedWeight {
+  const input = value.trim();
+  if (!/^\d+(?:\.\d+)?$/.test(input)) {
+    return { ok: false, weightKg: null };
+  }
+  const displayedWeight = Number(input);
+  const weightKg =
+    unit === "kg" ? displayedWeight : displayedWeight / LB_PER_KG;
+  if (!Number.isFinite(weightKg) || weightKg < 20 || weightKg > 500) {
+    return { ok: false, weightKg: null };
+  }
+  return {
+    ok: true,
+    weightKg: Math.round(weightKg * 1_000) / 1_000,
+  };
 }
 
 export function normalizeFoodSlug(slug: string) {

@@ -23,7 +23,22 @@ export const metadata: Metadata = { title: "My Plan" };
 
 type PlanRow = Tables<"plans">;
 type PlanItemRow = Tables<"plan_items">;
-type NutritionRow = Tables<"food_nutrition">;
+type NutritionRow = Pick<
+  Tables<"food_nutrition">,
+  | "calories"
+  | "carbohydrate_g"
+  | "fat_g"
+  | "fiber_g"
+  | "food_id"
+  | "measurement_basis"
+  | "protein_g"
+  | "reference_quantity"
+  | "reference_unit"
+  | "sodium_mg"
+  | "source_name"
+  | "source_reference"
+  | "verification_status"
+>;
 
 function titleCase(value: string) {
   return value

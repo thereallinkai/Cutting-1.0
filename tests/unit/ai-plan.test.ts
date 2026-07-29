@@ -116,6 +116,21 @@ describe("AI plan structured output", () => {
     }
   });
 
+  it("rejects external source-reported food until catalog review", () => {
+    const result = validateAiPlanDomain(makePlan(), {
+      allowedFoods: [
+        { ...allowedFoods[0], verificationStatus: "source_reported" },
+      ],
+      profile: emptyProfile,
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.issues).toContainEqual(
+        expect.objectContaining({ code: "verification" }),
+      );
+    }
+  });
+
   it("rejects measurement bases and portions outside trusted bounds", () => {
     const plan = makePlan();
     plan.days[0].meals[0].items[0].measurementBasis = "cooked";

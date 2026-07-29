@@ -14,7 +14,7 @@ async function main() {
 
   const provider = createPlanProvider("openai");
   const plan = await provider.generate({
-    safetyIdentifier: "cutting-plan-protected-smoke-test",
+    safetyIdentifier: "lets-go-green-protected-smoke-test",
     profile: {
       age: 30,
       currentWeightKg: 80,

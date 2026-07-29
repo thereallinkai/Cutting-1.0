@@ -17,6 +17,9 @@ type RegistrationField =
 
 type RegistrationErrors = Partial<Record<RegistrationField, string>>;
 
+const REGISTRATION_DRAFT_KEY = "lets-go-green-registration-draft";
+const LEGACY_REGISTRATION_DRAFT_KEY = "cutting-plan-registration-draft";
+
 export function RegisterForm() {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
@@ -26,10 +29,16 @@ export function RegisterForm() {
   const [pending, setPending] = useState(false);
 
   useEffect(() => {
-    const raw = window.localStorage.getItem("cutting-plan-registration-draft");
+    const current = window.localStorage.getItem(REGISTRATION_DRAFT_KEY);
+    const legacy = window.localStorage.getItem(LEGACY_REGISTRATION_DRAFT_KEY);
+    const raw = current ?? legacy;
     if (!raw || !formRef.current) return;
     try {
       const draft = JSON.parse(raw) as Record<string, string | boolean>;
+      if (!current && legacy) {
+        window.localStorage.setItem(REGISTRATION_DRAFT_KEY, legacy);
+        window.localStorage.removeItem(LEGACY_REGISTRATION_DRAFT_KEY);
+      }
       for (const name of ["fullName", "gender", "age", "email"]) {
         const control = formRef.current.elements.namedItem(name);
         if (
@@ -50,14 +59,15 @@ export function RegisterForm() {
         }
       }
     } catch {
-      window.localStorage.removeItem("cutting-plan-registration-draft");
+      window.localStorage.removeItem(REGISTRATION_DRAFT_KEY);
+      window.localStorage.removeItem(LEGACY_REGISTRATION_DRAFT_KEY);
     }
   }, []);
 
   function saveSafeDraft(formElement: HTMLFormElement) {
     const form = new FormData(formElement);
     window.localStorage.setItem(
-      "cutting-plan-registration-draft",
+      REGISTRATION_DRAFT_KEY,
       JSON.stringify({
         fullName: form.get("fullName") ?? "",
         gender: form.get("gender") ?? "",

@@ -15,7 +15,7 @@ export const metadata: Metadata = { title: "Settings" };
 const demoSettings: SettingsInitialData = {
   mode: "demo",
   account: {
-    email: "demo@cuttingplan.local",
+    email: "demo@letsgogreen.local",
     createdAt: null,
   },
   profile: {
@@ -179,13 +179,23 @@ export default async function SettingsPage() {
           targetDate: goal.target_date,
         }
       : null,
-    mealPreferences: (mealPreferencesResult.data ?? []).map((preference) => ({
-      mealType: preference.meal_type,
-      foodId: preference.food_id,
-      foodName:
-        preferenceFoodNames.get(preference.food_id) ?? "Unavailable food",
-      sortOrder: preference.sort_order,
-    })),
+    mealPreferences: (mealPreferencesResult.data ?? []).flatMap((preference) =>
+      ["breakfast", "lunch", "dinner"].includes(preference.meal_type)
+        ? [
+            {
+              mealType: preference.meal_type as
+                | "breakfast"
+                | "lunch"
+                | "dinner",
+              foodId: preference.food_id,
+              foodName:
+                preferenceFoodNames.get(preference.food_id) ??
+                "Unavailable food",
+              sortOrder: preference.sort_order,
+            },
+          ]
+        : [],
+    ),
     privateLabelFoods: (privateFoodsResult.data ?? []).map((food) => {
       const nutrition = food.food_nutrition.find(
         (row) => row.measurement_basis === "label_serving",

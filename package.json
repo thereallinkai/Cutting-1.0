@@ -1,8 +1,8 @@
 {
-  "name": "cutting-plan",
+  "name": "lets-go-green",
   "version": "0.1.0",
   "private": true,
-  "description": "A calm, safety-aware meal planning and habit tracking application.",
+  "description": "Let's Go Green! is a calm, safety-aware meal planning and habit tracking application.",
   "license": "UNLICENSED",
   "engines": {
     "node": ">=22.0.0 <23"
@@ -55,6 +55,7 @@
     "react-hook-form": "7.83.0",
     "recharts": "3.10.0",
     "server-only": "0.0.1",
+    "sharp": "0.35.3",
     "tailwind-merge": "3.6.0",
     "zod": "4.4.3"
   },

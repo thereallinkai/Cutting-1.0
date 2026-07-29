@@ -3,12 +3,18 @@
 # Supabase expands this value while reading config.toml. It keeps the local
 # Auth redirect allow-list exact in Codespaces without hardcoding GitHub's
 # forwarded-domain format in the repository.
-if [[ -z "${CUTTING_PLAN_AUTH_REDIRECT_URL:-}" ]]; then
+if [[ -z "${LETS_GO_GREEN_AUTH_REDIRECT_URL:-}" ]]; then
+  # Migrate an existing ignored local environment without breaking its
+  # currently configured callback during the repository rename.
+  LETS_GO_GREEN_AUTH_REDIRECT_URL="${CUTTING_PLAN_AUTH_REDIRECT_URL:-}"
+fi
+
+if [[ -z "${LETS_GO_GREEN_AUTH_REDIRECT_URL:-}" ]]; then
   if [[ -n "${CODESPACE_NAME:-}" && -n "${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN:-}" ]]; then
-    CUTTING_PLAN_AUTH_REDIRECT_URL="https://${CODESPACE_NAME}-3000.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}/auth/callback"
+    LETS_GO_GREEN_AUTH_REDIRECT_URL="https://${CODESPACE_NAME}-3000.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}/auth/callback"
   else
-    CUTTING_PLAN_AUTH_REDIRECT_URL="http://127.0.0.1:3000/auth/callback"
+    LETS_GO_GREEN_AUTH_REDIRECT_URL="http://127.0.0.1:3000/auth/callback"
   fi
 fi
 
-export CUTTING_PLAN_AUTH_REDIRECT_URL
+export LETS_GO_GREEN_AUTH_REDIRECT_URL

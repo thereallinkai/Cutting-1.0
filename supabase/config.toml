@@ -1,3 +1,6 @@
+# Stable local-stack key: changing this would detach existing developers from
+# their preserved Supabase Docker volumes. Product-facing naming is Let's Go
+# Green!; this compatibility identifier is intentionally not displayed.
 project_id = "cutting-plan"
 
 [api]
@@ -53,7 +56,7 @@ additional_redirect_urls = [
   "http://127.0.0.1:3000",
   "http://localhost:3000/auth/callback",
   "http://127.0.0.1:3000/auth/callback",
-  "env(CUTTING_PLAN_AUTH_REDIRECT_URL)",
+  "env(LETS_GO_GREEN_AUTH_REDIRECT_URL)",
 ]
 jwt_expiry = 3600
 enable_refresh_token_rotation = true
@@ -72,11 +75,11 @@ otp_length = 6
 otp_expiry = 3600
 
 [auth.email.template.confirmation]
-subject = "Your Cutting Plan verification code"
+subject = "Your Let's Go Green! verification code"
 content_path = "./supabase/templates/confirmation.html"
 
 [auth.email.template.recovery]
-subject = "Reset your Cutting Plan password"
+subject = "Reset your Let's Go Green! password"
 content_path = "./supabase/templates/recovery.html"
 
 [auth.sms]

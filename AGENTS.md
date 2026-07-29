@@ -1,8 +1,8 @@
-# Cutting Plan Repository Guidance
+# Let's Go Green! Repository Guidance
 
 ## Product and language
 
-Cutting Plan is a calm, safety-aware wellness, meal-planning, and habit-tracking application. It is not a medical product and must not diagnose, guarantee outcomes, shame a user, or escalate restriction automatically.
+Let's Go Green! is a calm, safety-aware wellness, meal-planning, and habit-tracking application. It is not a medical product and must not diagnose, guarantee outcomes, shame a user, or escalate restriction automatically.
 
 Write all source code, filenames, database identifiers, migrations, seed content, UI text, error messages, comments, documentation, test names, and configuration in English.
 
@@ -30,7 +30,7 @@ Write all source code, filenames, database identifiers, migrations, seed content
 
 - `npm run bootstrap` installs the lockfile, starts or reuses local Supabase, applies pending migrations and the idempotent seed, generates `.env.local` without replacing existing values, generates database types, installs Chromium, and performs health checks.
 - `npm run services:start` starts or reuses local Supabase and waits on a health endpoint.
-- `npm run dev:all` starts local services and Next.js. The VS Code task `Start Cutting Plan` runs this command.
+- `npm run dev:all` starts local services and Next.js. The VS Code task `Start Let's Go Green!` runs this command.
 - `npm run doctor` diagnoses the runtime, Docker, Supabase, database, migration, port, configuration, application, and Playwright state.
 - `npm run down` stops local Supabase while preserving its development data.
 - `npm run db:reset` is destructive to local data. Run it only when the user explicitly intends to reconstruct a disposable local database.

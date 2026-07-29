@@ -4,21 +4,22 @@ import {
   CalendarCheck2,
   ChartNoAxesCombined,
   Check,
-  Leaf,
   Sparkles,
 } from "lucide-react";
+import { BrandLink } from "@/components/brand-link";
 import { Button } from "@/components/ui/button";
+import { BRAND } from "@/src/lib/brand";
 
 const benefits = [
   {
     icon: Sparkles,
-    title: "Personalized meal guidance",
-    body: "Build a seven-day rhythm around foods you already enjoy, with every estimate clearly labeled.",
+    title: "Exact food and product guidance",
+    body: "Choose generic foods or exact brands, flavors, and barcodes with visible nutrition sources and verification status.",
   },
   {
     icon: CalendarCheck2,
     title: "Daily meal check-ins",
-    body: "Mark breakfast, lunch, and dinner without streak pressure, scores, or judgment.",
+    body: "Record planned meals, optional snacks, or a skipped meal with an optional reason—without streak pressure or judgment.",
   },
   {
     icon: ChartNoAxesCombined,
@@ -31,12 +32,7 @@ export default function Home() {
   return (
     <main id="main-content" className="landing">
       <header className="landing-header shell">
-        <Link className="brand" href="/" aria-label="Cutting Plan home">
-          <span className="brand-mark" aria-hidden="true">
-            <Leaf size={19} strokeWidth={2.25} />
-          </span>
-          Cutting Plan
-        </Link>
+        <BrandLink />
         <nav aria-label="Public navigation" className="header-actions">
           <Link className="text-link" href="/login">
             Log in
@@ -73,7 +69,7 @@ export default function Home() {
 
         <div
           className="product-preview"
-          aria-label="Preview of the Cutting Plan Today page"
+          aria-label={`Preview of the ${BRAND.name} Today page`}
           tabIndex={0}
         >
           <div className="preview-topline">
@@ -82,7 +78,7 @@ export default function Home() {
               <strong>Good morning, Jamie</strong>
             </div>
             <span className="status-chip">
-              <span aria-hidden="true">●</span> On track
+              <span aria-hidden="true">●</span> Today
             </span>
           </div>
           <div className="preview-progress">
@@ -155,7 +151,7 @@ export default function Home() {
       </section>
 
       <footer className="landing-footer shell">
-        <div className="brand"><span className="brand-mark" aria-hidden="true"><Leaf size={18} /></span>Cutting Plan</div>
+        <BrandLink />
         <p>
           This product provides general wellness information and is not medical
           advice. Individual needs can vary.

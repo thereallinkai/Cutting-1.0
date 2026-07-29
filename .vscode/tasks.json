@@ -2,7 +2,7 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Start Cutting Plan",
+      "label": "Start Let's Go Green!",
       "type": "shell",
       "command": "npm run dev:all",
       "isBackground": true,
@@ -18,7 +18,7 @@
       }
     },
     {
-      "label": "Bootstrap Cutting Plan",
+      "label": "Bootstrap Let's Go Green!",
       "type": "shell",
       "command": "npm run bootstrap",
       "problemMatcher": [],
@@ -28,7 +28,7 @@
       }
     },
     {
-      "label": "Check Cutting Plan",
+      "label": "Check Let's Go Green!",
       "type": "shell",
       "command": "npm run doctor",
       "problemMatcher": [],
@@ -38,7 +38,7 @@
       }
     },
     {
-      "label": "Verify Cutting Plan",
+      "label": "Verify Let's Go Green!",
       "type": "shell",
       "command": "npm run verify",
       "problemMatcher": [],
@@ -52,7 +52,7 @@
       }
     },
     {
-      "label": "Stop Cutting Plan Services",
+      "label": "Stop Let's Go Green! Services",
       "type": "shell",
       "command": "npm run down",
       "problemMatcher": [],

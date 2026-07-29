@@ -48,7 +48,7 @@ check_listening_port() {
   fi
 }
 
-printf 'Cutting Plan environment doctor\n\n'
+printf "Let's Go Green! environment doctor\n\n"
 
 EXPECTED_NODE="$(tr -d '[:space:]' < .nvmrc 2>/dev/null || true)"
 if command -v node >/dev/null 2>&1; then
@@ -183,7 +183,7 @@ elif APP_HEALTH_RESPONSE="$(curl --connect-timeout 2 --max-time 5 --silent --sho
     warn "Next.js answered /api/health, but the response shape was not recognized."
   fi
 else
-  fail "Next.js is not ready on port 3000. Run the VS Code task 'Start Cutting Plan' or 'npm run dev:all'."
+  fail "Next.js is not ready on port 3000. Run the VS Code task \"Start Let's Go Green!\" or 'npm run dev:all'."
 fi
 
 if [[ -x node_modules/.bin/playwright ]] && command -v node >/dev/null 2>&1; then

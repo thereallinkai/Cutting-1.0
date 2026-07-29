@@ -113,6 +113,7 @@ export interface AiPlanValidationIssue {
   code:
     | "schema"
     | "unknown_food"
+    | "verification"
     | "measurement_basis"
     | "unit"
     | "portion"
@@ -197,6 +198,13 @@ export function validateAiPlanDomain(
             message: `Food ${item.foodId} is not in the allowed catalog.`,
           });
           return;
+        }
+        if (!["verified", "user_label"].includes(food.verificationStatus)) {
+          issues.push({
+            code: "verification",
+            path: `${path}.foodId`,
+            message: `${item.foodId} does not have plan-eligible nutrition verification.`,
+          });
         }
         if (!food.allowedMeasurementBases.includes(item.measurementBasis)) {
           issues.push({

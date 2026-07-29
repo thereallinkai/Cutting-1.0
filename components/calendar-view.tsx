@@ -1,18 +1,42 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, ChevronLeft, ChevronRight, Circle, Undo2 } from "lucide-react";
-import { addLocalDays, localDateInTimeZone } from "@/src/lib/domain";
-
-type MealKey = "breakfast" | "lunch" | "dinner";
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Circle,
+  Undo2,
+} from "lucide-react";
+import {
+  MEAL_SLOT_LABELS,
+  MEAL_SLOTS,
+  SNACK_MEAL_TYPES,
+  addLocalDays,
+  localDateInTimeZone,
+  normalizeMealSlotCheckins,
+  summarizeMealCheckins,
+  type MealCheckinStatus,
+  type MealSlot,
+  type MealSlotCheckin,
+} from "@/src/lib/domain";
 
 export type CalendarCheckin = {
-  local_date: string;
-  breakfast_completed: boolean;
-  lunch_completed: boolean;
-  dinner_completed: boolean;
+  localDate: string;
+  slots: MealSlotCheckin[];
   notes: string | null;
 };
+
+type LastChange =
+  | {
+      kind: "meal";
+      mealType: MealSlot;
+      previous: MealSlotCheckin;
+    }
+  | {
+      kind: "note";
+      previous: string;
+    };
 
 function monthBounds(month: string) {
   const [year, monthNumber] = month.split("-").map(Number);
@@ -48,11 +72,18 @@ function fullDateLabel(localDate: string) {
   }).format(new Date(`${localDate}T12:00:00Z`));
 }
 
-function toMealState(checkin?: CalendarCheckin) {
+function emptyCheckin(localDate: string): CalendarCheckin {
   return {
-    breakfast: checkin?.breakfast_completed ?? false,
-    lunch: checkin?.lunch_completed ?? false,
-    dinner: checkin?.dinner_completed ?? false,
+    localDate,
+    slots: normalizeMealSlotCheckins([]),
+    notes: null,
+  };
+}
+
+function normalizeCheckin(checkin: CalendarCheckin): CalendarCheckin {
+  return {
+    ...checkin,
+    slots: normalizeMealSlotCheckins(checkin.slots),
   };
 }
 
@@ -73,10 +104,21 @@ export function CalendarView({
         const day = index + 1;
         const completed = (day * 7) % 4;
         return {
-          local_date: `2026-07-${String(day).padStart(2, "0")}`,
-          breakfast_completed: completed > 0,
-          lunch_completed: completed > 1,
-          dinner_completed: completed > 2,
+          localDate: `2026-07-${String(day).padStart(2, "0")}`,
+          slots: normalizeMealSlotCheckins(
+            MEAL_SLOTS.map((mealType) => ({
+              mealType,
+              status:
+                mealType === "breakfast" && completed > 0
+                  ? "completed"
+                  : mealType === "lunch" && completed > 1
+                    ? "completed"
+                    : mealType === "dinner" && completed > 2
+                      ? "completed"
+                      : "not_marked",
+              skipReason: null,
+            })),
+          ),
           notes: null,
         };
       }),
@@ -84,23 +126,36 @@ export function CalendarView({
   );
   const [month, setMonth] = useState(initialMonth);
   const [checkins, setCheckins] = useState<CalendarCheckin[]>(
-    initialCheckins ?? demoCheckins,
+    (initialCheckins ?? demoCheckins).map(normalizeCheckin),
   );
   const [selectedDate, setSelectedDate] = useState(initialSelectedDate);
-  const selectedCheckin = checkins.find(
-    (checkin) => checkin.local_date === selectedDate,
-  );
-  const [mealState, setMealState] = useState<Record<MealKey, boolean>>(
-    toMealState(selectedCheckin),
-  );
-  const [notes, setNotes] = useState(selectedCheckin?.notes ?? "");
+  const selectedCheckin =
+    checkins.find((checkin) => checkin.localDate === selectedDate) ??
+    emptyCheckin(selectedDate);
+  const [notes, setNotes] = useState(selectedCheckin.notes ?? "");
   const [announcement, setAnnouncement] = useState("");
   const [saving, setSaving] = useState(false);
-  const [lastSnapshot, setLastSnapshot] = useState<{
-    state: Record<MealKey, boolean>;
-    notes: string;
-  } | null>(null);
+  const [lastChange, setLastChange] = useState<LastChange | null>(null);
+  const [skipEditor, setSkipEditor] = useState<MealSlot | null>(null);
+  const [skipReason, setSkipReason] = useState("");
   const today = localDateInTimeZone(new Date(), timeZone);
+
+  function replaceSelected(
+    updater: (checkin: CalendarCheckin) => CalendarCheckin,
+  ) {
+    setCheckins((current) => {
+      const existing = current.find(
+        (checkin) => checkin.localDate === selectedDate,
+      );
+      const next = updater(existing ?? emptyCheckin(selectedDate));
+      return [
+        ...current.filter(
+          (checkin) => checkin.localDate !== selectedDate,
+        ),
+        next,
+      ];
+    });
+  }
 
   const calendarDays = useMemo(() => {
     const bounds = monthBounds(month);
@@ -108,16 +163,20 @@ export function CalendarView({
     const gridStart = addLocalDays(bounds.first, -firstWeekday);
     return Array.from({ length: 42 }, (_, index) => {
       const localDate = addLocalDays(gridStart, index);
-      const checkin = checkins.find((item) => item.local_date === localDate);
+      const checkin = checkins.find((item) => item.localDate === localDate);
+      const summary = summarizeMealCheckins(checkin?.slots ?? []);
+      const snacks = (checkin?.slots ?? []).filter(
+        (slot) =>
+          SNACK_MEAL_TYPES.includes(
+            slot.mealType as (typeof SNACK_MEAL_TYPES)[number],
+          ) && slot.status === "completed",
+      ).length;
       return {
         localDate,
         label: Number(localDate.slice(-2)),
         outside: !localDate.startsWith(month),
-        completed: checkin
-          ? Number(checkin.breakfast_completed) +
-            Number(checkin.lunch_completed) +
-            Number(checkin.dinner_completed)
-          : 0,
+        marked: summary.marked,
+        snacks,
       };
     });
   }, [checkins, month]);
@@ -133,17 +192,16 @@ export function CalendarView({
       const result = (await response.json()) as {
         data: CalendarCheckin[] | null;
       };
-      const nextCheckins = result.data ?? [];
+      const nextCheckins = (result.data ?? []).map(normalizeCheckin);
       setMonth(nextMonth);
       setCheckins(nextCheckins);
       const nextSelected = selectDate ?? first;
       setSelectedDate(nextSelected);
       const nextCheckin = nextCheckins.find(
-        (checkin) => checkin.local_date === nextSelected,
+        (checkin) => checkin.localDate === nextSelected,
       );
-      setMealState(toMealState(nextCheckin));
       setNotes(nextCheckin?.notes ?? "");
-      setLastSnapshot(null);
+      setLastChange(null);
       setAnnouncement(`${monthLabel(nextMonth)} is ready.`);
     } catch {
       setAnnouncement(
@@ -153,53 +211,67 @@ export function CalendarView({
   }
 
   function selectDay(localDate: string) {
-    const checkin = checkins.find((item) => item.local_date === localDate);
+    const checkin = checkins.find((item) => item.localDate === localDate);
     setSelectedDate(localDate);
-    setMealState(toMealState(checkin));
     setNotes(checkin?.notes ?? "");
-    setLastSnapshot(null);
+    setLastChange(null);
+    setSkipEditor(null);
   }
 
-  async function persist(
-    desired: Record<MealKey, boolean>,
-    desiredNotes: string,
+  async function persistMeal(
+    mealType: MealSlot,
+    status: MealCheckinStatus,
+    reason: string | null,
   ) {
     const response = await fetch(`/api/checkins/${selectedDate}`, {
-      method: "PUT",
+      method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        breakfastCompleted: desired.breakfast,
-        lunchCompleted: desired.lunch,
-        dinnerCompleted: desired.dinner,
-        notes: desiredNotes || null,
+        kind: "meal_status",
+        mealType,
+        status,
+        skipReason: status === "skipped" ? reason : null,
       }),
     });
     if (!response.ok) throw new Error("save_failed");
-    setCheckins((current) => [
-      ...current.filter((item) => item.local_date !== selectedDate),
-      {
-        local_date: selectedDate,
-        breakfast_completed: desired.breakfast,
-        lunch_completed: desired.lunch,
-        dinner_completed: desired.dinner,
-        notes: desiredNotes || null,
-      },
-    ]);
   }
 
-  async function setMeal(key: MealKey, value: boolean) {
+  async function setMeal(
+    mealType: MealSlot,
+    status: MealCheckinStatus,
+    reason: string | null = null,
+  ) {
     if (saving || selectedDate > today) return;
-    const previous = mealState;
-    const desired = { ...mealState, [key]: value };
-    setMealState(desired);
-    setLastSnapshot({ state: previous, notes });
+    const previous = selectedCheckin.slots.find(
+      (slot) => slot.mealType === mealType,
+    )!;
+    const next = {
+      mealType,
+      status,
+      skipReason: status === "skipped" ? reason : null,
+    } satisfies MealSlotCheckin;
+    replaceSelected((checkin) => ({
+      ...checkin,
+      slots: checkin.slots.map((slot) =>
+        slot.mealType === mealType ? next : slot,
+      ),
+    }));
     setSaving(true);
     try {
-      await persist(desired, notes);
-      setAnnouncement(`${key} is now ${value ? "completed" : "not marked"}.`);
+      await persistMeal(mealType, status, reason);
+      setLastChange({ kind: "meal", mealType, previous });
+      setSkipEditor(null);
+      setSkipReason("");
+      setAnnouncement(
+        `${MEAL_SLOT_LABELS[mealType]} is now ${status.replace("_", " ")}.`,
+      );
     } catch {
-      setMealState(previous);
-      setLastSnapshot(null);
+      replaceSelected((checkin) => ({
+        ...checkin,
+        slots: checkin.slots.map((slot) =>
+          slot.mealType === mealType ? previous : slot,
+        ),
+      }));
       setAnnouncement(
         "The update could not be saved. The previous status was restored.",
       );
@@ -210,15 +282,23 @@ export function CalendarView({
 
   async function saveNotes() {
     if (saving || selectedDate > today) return;
-    const previousNotes = selectedCheckin?.notes ?? "";
+    const previous = selectedCheckin.notes ?? "";
     setSaving(true);
-    setLastSnapshot({ state: mealState, notes: previousNotes });
     try {
-      await persist(mealState, notes);
+      const response = await fetch(`/api/checkins/${selectedDate}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ kind: "note", notes: notes || null }),
+      });
+      if (!response.ok) throw new Error("save_failed");
+      replaceSelected((checkin) => ({
+        ...checkin,
+        notes: notes || null,
+      }));
+      setLastChange({ kind: "note", previous });
       setAnnouncement("The note was saved.");
     } catch {
-      setNotes(previousNotes);
-      setLastSnapshot(null);
+      setNotes(previous);
       setAnnouncement(
         "The note could not be saved. The previous note was restored.",
       );
@@ -228,23 +308,55 @@ export function CalendarView({
   }
 
   async function undo() {
-    if (!lastSnapshot || saving) return;
-    const current = { state: mealState, notes };
-    setMealState(lastSnapshot.state);
-    setNotes(lastSnapshot.notes);
+    if (!lastChange || saving) return;
     setSaving(true);
     try {
-      await persist(lastSnapshot.state, lastSnapshot.notes);
-      setLastSnapshot(current);
+      if (lastChange.kind === "meal") {
+        await persistMeal(
+          lastChange.mealType,
+          lastChange.previous.status,
+          lastChange.previous.skipReason,
+        );
+        replaceSelected((checkin) => ({
+          ...checkin,
+          slots: checkin.slots.map((slot) =>
+            slot.mealType === lastChange.mealType
+              ? lastChange.previous
+              : slot,
+          ),
+        }));
+      } else {
+        const response = await fetch(`/api/checkins/${selectedDate}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            kind: "note",
+            notes: lastChange.previous || null,
+          }),
+        });
+        if (!response.ok) throw new Error("undo_failed");
+        setNotes(lastChange.previous);
+        replaceSelected((checkin) => ({
+          ...checkin,
+          notes: lastChange.previous || null,
+        }));
+      }
+      setLastChange(null);
       setAnnouncement("The last saved change was undone.");
     } catch {
-      setMealState(current.state);
-      setNotes(current.notes);
       setAnnouncement("Undo could not be saved. The latest state remains.");
     } finally {
       setSaving(false);
     }
   }
+
+  const selectedSummary = summarizeMealCheckins(selectedCheckin.slots);
+  const selectedSnacks = selectedCheckin.slots.filter(
+    (slot) =>
+      SNACK_MEAL_TYPES.includes(
+        slot.mealType as (typeof SNACK_MEAL_TYPES)[number],
+      ) && slot.status === "completed",
+  ).length;
 
   return (
     <div className="page-frame">
@@ -257,7 +369,7 @@ export function CalendarView({
               : timeZone.replaceAll("_", " ")}
           </span>
           <h1>Calendar</h1>
-          <p>Review meal check-ins by local calendar date.</p>
+          <p>Review meal and optional snack check-ins by local calendar date.</p>
         </div>
         <button className="button button-quiet" type="button" onClick={() => {
           const currentMonth = today.slice(0, 7);
@@ -282,16 +394,16 @@ export function CalendarView({
                 className={`calendar-day ${item.outside ? "outside" : ""} ${selectedDate === item.localDate ? "selected" : ""}`}
                 key={item.localDate}
                 type="button"
-                aria-label={`${fullDateLabel(item.localDate)}, ${item.completed} of 3 meals completed`}
+                aria-label={`${fullDateLabel(item.localDate)}, ${item.marked} of 3 planned meals marked${item.snacks ? `, ${item.snacks} snacks recorded` : ""}`}
                 aria-pressed={selectedDate === item.localDate}
                 disabled={item.outside}
                 onClick={() => selectDay(item.localDate)}
               >
                 <span className="day-number">{item.label}</span>
                 <span className="meal-dots" aria-hidden="true">
-                  {[0, 1, 2].map((dot) => <i className={dot < item.completed ? "complete" : ""} key={dot} />)}
+                  {[0, 1, 2].map((dot) => <i className={dot < item.marked ? "complete" : ""} key={dot} />)}
                 </span>
-                {!item.outside ? <span className="completion-copy">{item.completed} of 3</span> : null}
+                {!item.outside ? <span className="completion-copy">{item.marked} of 3{item.snacks ? ` · +${item.snacks}` : ""}</span> : null}
               </button>
             ))}
           </div>
@@ -300,39 +412,95 @@ export function CalendarView({
         <aside className="card selected-day-panel">
           <span className="date-label">Selected day</span>
           <h2>{fullDateLabel(selectedDate)}</h2>
-          <p>{Object.values(mealState).filter(Boolean).length} of 3 meals completed</p>
+          <p>
+            {selectedSummary.marked} of 3 planned meals marked
+            {selectedSummary.skipped ? ` · ${selectedSummary.skipped} skipped` : ""}
+            {selectedSnacks ? ` · ${selectedSnacks} snacks recorded` : ""}
+          </p>
           <div className="day-meal-list">
-            {([
-              ["breakfast", "Breakfast"],
-              ["lunch", "Lunch"],
-              ["dinner", "Dinner"],
-            ] as Array<[MealKey, string]>).map(([key, title]) => (
-              <div className="day-meal" key={key}>
+            {selectedCheckin.slots.map((slot) => (
+              <div className="day-meal" key={slot.mealType}>
                 <div>
-                  <strong>{title}</strong>
-                  <button
-                    className={`check-button ${mealState[key] ? "complete" : ""}`}
-                    type="button"
-                    disabled={saving || selectedDate > today}
-                    aria-pressed={mealState[key]}
-                    onClick={() => setMeal(key, !mealState[key])}
-                  >
-                    {mealState[key] ? <Check size={15} /> : <Circle size={14} />}
-                    {mealState[key] ? "Completed" : "Not marked"}
-                  </button>
+                  <strong>{MEAL_SLOT_LABELS[slot.mealType]}</strong>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: ".4rem" }}>
+                    <button
+                      className={`check-button ${slot.status === "completed" ? "complete" : ""}`}
+                      type="button"
+                      disabled={saving || selectedDate > today}
+                      aria-pressed={slot.status === "completed"}
+                      onClick={() =>
+                        void setMeal(
+                          slot.mealType,
+                          slot.status === "completed"
+                            ? "not_marked"
+                            : "completed",
+                        )
+                      }
+                    >
+                      {slot.status === "completed" ? <Check size={15} /> : <Circle size={14} />}
+                      {slot.status === "completed" ? "Completed" : "Mark completed"}
+                    </button>
+                    <button
+                      className="button button-quiet"
+                      disabled={saving || selectedDate > today}
+                      onClick={() => {
+                        if (slot.status === "skipped") {
+                          void setMeal(slot.mealType, "not_marked");
+                        } else {
+                          setSkipEditor(slot.mealType);
+                          setSkipReason("");
+                        }
+                      }}
+                      type="button"
+                    >
+                      {slot.status === "skipped" ? "Return to not marked" : "Skip"}
+                    </button>
+                  </div>
                 </div>
-                <span className="field-help">Plan details remain on My Plan.</span>
+                <span className="field-help">
+                  {slot.status === "skipped"
+                    ? `Skipped${slot.skipReason ? ` · ${slot.skipReason}` : " · no reason provided"}`
+                    : SNACK_MEAL_TYPES.includes(slot.mealType as (typeof SNACK_MEAL_TYPES)[number])
+                      ? "Optional snack space. Add foods from Today."
+                      : "Plan details remain on My Plan."}
+                </span>
+                {skipEditor === slot.mealType ? (
+                  <div>
+                    <label className="field">
+                      <span className="field-label">Optional skip reason</span>
+                      <input
+                        maxLength={500}
+                        onChange={(event) => setSkipReason(event.target.value)}
+                        placeholder="You can leave this blank"
+                        value={skipReason}
+                      />
+                    </label>
+                    <div className="header-actions">
+                      <button
+                        className="button button-dark"
+                        disabled={saving}
+                        onClick={() => void setMeal(slot.mealType, "skipped", skipReason.trim() || null)}
+                        type="button"
+                      >
+                        Save skipped status
+                      </button>
+                      <button className="button button-quiet" onClick={() => setSkipEditor(null)} type="button">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>
           <label className="field" style={{ marginTop: "1rem" }}>
             <span className="field-label">Optional note</span>
-            <textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Add context for your future self…" />
+            <textarea maxLength={2000} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Add context for your future self…" />
           </label>
           <button className="button button-dark form-submit" disabled={saving || selectedDate > today} type="button" onClick={saveNotes}>
             Save note
           </button>
-          <button className="button button-quiet form-submit" disabled={!lastSnapshot || saving} type="button" onClick={undo}>
+          <button className="button button-quiet form-submit" disabled={!lastChange || saving} type="button" onClick={undo}>
             <Undo2 size={16} /> Undo last saved change
           </button>
           {selectedDate > today ? <p className="field-help">Future meal completion is disabled.</p> : null}

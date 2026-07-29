@@ -5,6 +5,9 @@ import {
 } from "@/components/calendar-view";
 import {
   localDateInTimeZone,
+  normalizeMealSlotCheckins,
+  type MealCheckinStatus,
+  type MealSlot,
 } from "@/src/lib/domain";
 import { isDevelopmentDemo } from "@/src/lib/env";
 import { createSupabaseServerClient } from "@/src/lib/supabase/server";
@@ -35,21 +38,49 @@ export default async function CalendarPage() {
   const today = localDateInTimeZone(new Date(), timeZone);
   const month = today.slice(0, 7);
   const bounds = monthBounds(month);
-  const { data } = await supabase
-    .from("daily_checkins")
-    .select(
-      "local_date,breakfast_completed,lunch_completed,dinner_completed,notes",
-    )
-    .eq("user_id", auth.user.id)
-    .gte("local_date", bounds.first)
-    .lte("local_date", bounds.last)
-    .order("local_date");
+  const [daysResult, mealsResult] = await Promise.all([
+    supabase
+      .from("daily_checkins")
+      .select("local_date,notes")
+      .eq("user_id", auth.user.id)
+      .gte("local_date", bounds.first)
+      .lte("local_date", bounds.last)
+      .order("local_date"),
+    supabase
+      .from("daily_meal_checkins")
+      .select("local_date,meal_type,status,skip_reason")
+      .eq("user_id", auth.user.id)
+      .gte("local_date", bounds.first)
+      .lte("local_date", bounds.last)
+      .order("local_date"),
+  ]);
+  const mealRows = (mealsResult.data ?? []) as Array<{
+    local_date: string;
+    meal_type: MealSlot;
+    skip_reason: string | null;
+    status: MealCheckinStatus;
+  }>;
+  const initialCheckins: CalendarCheckin[] = (daysResult.data ?? []).map(
+    (day) => ({
+      localDate: day.local_date,
+      notes: day.notes,
+      slots: normalizeMealSlotCheckins(
+        mealRows
+          .filter((meal) => meal.local_date === day.local_date)
+          .map((meal) => ({
+            mealType: meal.meal_type,
+            status: meal.status,
+            skipReason: meal.skip_reason,
+          })),
+      ),
+    }),
+  );
 
   return (
     <CalendarView
       initialMonth={month}
       initialSelectedDate={today}
-      initialCheckins={(data ?? []) as CalendarCheckin[]}
+      initialCheckins={initialCheckins}
       timeZone={timeZone}
     />
   );

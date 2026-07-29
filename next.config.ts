@@ -4,6 +4,11 @@ const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
   reactStrictMode: true,
+  experimental: {
+    // Proxy buffers request bodies before Route Handlers. Keep that buffer
+    // close to the 8 MB private label-photo limit.
+    proxyClientMaxBodySize: "9mb",
+  },
   async headers() {
     return [
       {
@@ -14,7 +19,8 @@ const nextConfig: NextConfig = {
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           {
             key: "Permissions-Policy",
-            value: "camera=(), microphone=(), geolocation=(), payment=()",
+            value:
+              "camera=(self), microphone=(), geolocation=(self), payment=()",
           },
         ],
       },

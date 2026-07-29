@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
 
-select plan(26);
+select plan(38);
 
 insert into auth.users (
   instance_id,
@@ -150,6 +150,87 @@ values
     'user_label'
   );
 
+insert into public.foods (
+  id,
+  slug,
+  english_name,
+  source,
+  ownership_type,
+  owner_user_id,
+  verification_status,
+  catalog_status
+)
+values
+  (
+    'd2000000-0000-4000-8000-000000000001',
+    'rejected-catalog-test-food',
+    'Rejected catalog test food',
+    'RLS test fixture',
+    'catalog',
+    null,
+    'verified',
+    'rejected'
+  ),
+  (
+    'd2000000-0000-4000-8000-000000000002',
+    'retired-catalog-test-food',
+    'Retired catalog test food',
+    'RLS test fixture',
+    'catalog',
+    null,
+    'verified',
+    'retired'
+  );
+
+insert into public.food_label_submissions (
+  id,
+  user_id,
+  status,
+  brand_name,
+  product_name,
+  label_data
+)
+values (
+  'b7000000-0000-4000-8000-000000000001',
+  'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+  'draft',
+  'User B Brand',
+  'User B Product',
+  '{
+    "servingWeightGrams": 30,
+    "calories": 120,
+    "proteinGrams": 20,
+    "carbohydrateGrams": 4,
+    "fatGrams": 2,
+    "confirmedAccurate": false
+  }'::jsonb
+);
+
+insert into public.food_label_images (
+  id,
+  submission_id,
+  user_id,
+  object_path,
+  image_kind,
+  mime_type,
+  byte_size,
+  pixel_width,
+  pixel_height,
+  sha256
+)
+values (
+  'b8000000-0000-4000-8000-000000000001',
+  'b7000000-0000-4000-8000-000000000001',
+  'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+  'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/test/nutrition.jpg',
+  'nutrition',
+  'image/jpeg',
+  100,
+  10,
+  10,
+  repeat('a', 64)
+);
+
 insert into public.food_allergens (food_id, allergen_id)
 values (
   'b2000000-0000-4000-8000-000000000001',
@@ -167,6 +248,36 @@ values (
   current_date,
   true,
   'User B note'
+);
+
+insert into public.daily_meal_checkins (
+  id,
+  user_id,
+  local_date,
+  meal_type,
+  status
+)
+values (
+  'b5000000-0000-4000-8000-000000000001',
+  'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+  current_date,
+  'breakfast',
+  'completed'
+);
+
+insert into public.daily_meal_items (
+  id,
+  meal_checkin_id,
+  user_id,
+  food_id,
+  sort_order
+)
+values (
+  'b6000000-0000-4000-8000-000000000001',
+  'b5000000-0000-4000-8000-000000000001',
+  'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+  '10000000-0000-4000-8000-000000000002',
+  0
 );
 
 insert into public.plans (
@@ -188,7 +299,7 @@ values
     1,
     'mock',
     'mock-v1',
-    'cutting-plan-v1',
+    'lets-go-green-v2',
     '{}'::jsonb,
     '{}'::jsonb
   ),
@@ -199,7 +310,7 @@ values
     1,
     'mock',
     'mock-v1',
-    'cutting-plan-v1',
+    'lets-go-green-v2',
     '{}'::jsonb,
     '{}'::jsonb
   );
@@ -280,6 +391,42 @@ select is(
 select is(
   (
     select count(*)
+    from public.foods
+    where id = 'd2000000-0000-4000-8000-000000000001'
+  ),
+  0::bigint,
+  'authenticated catalog reads hide rejected foods'
+);
+select is(
+  (
+    select count(*)
+    from public.foods
+    where id = 'd2000000-0000-4000-8000-000000000002'
+  ),
+  1::bigint,
+  'authenticated catalog reads retain retired foods for history'
+);
+select is(
+  (
+    select count(*)
+    from public.food_label_submissions
+    where user_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+  ),
+  0::bigint,
+  'User A cannot read User B label submissions'
+);
+select is(
+  (
+    select count(*)
+    from public.food_label_images
+    where user_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+  ),
+  0::bigint,
+  'User A cannot read User B private label-image metadata'
+);
+select is(
+  (
+    select count(*)
     from public.food_allergens
     where food_id = 'b2000000-0000-4000-8000-000000000001'
   ),
@@ -304,15 +451,64 @@ select is(
   0::bigint,
   'User A cannot read User B check-in'
 );
-select results_eq(
+select is(
+  (
+    select count(*)
+    from public.daily_meal_checkins
+    where user_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+  ),
+  0::bigint,
+  'User A cannot read User B meal-slot check-in'
+);
+select is(
+  (
+    select count(*)
+    from public.daily_meal_items
+    where user_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+  ),
+  0::bigint,
+  'User A cannot read User B recorded foods'
+);
+select throws_ok(
+  $$
+    update public.daily_meal_checkins
+    set status = 'skipped'
+    where user_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+  $$,
+  '42501',
+  'permission denied for table daily_meal_checkins',
+  'authenticated clients cannot bypass the meal-slot RPC'
+);
+select throws_ok(
   $$
     update public.daily_checkins
     set notes = 'tampered'
     where user_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
-    returning id
   $$,
-  $$ select null::uuid where false $$,
-  'User A cannot update User B check-in'
+  '42501',
+  'permission denied for table daily_checkins',
+  'authenticated clients cannot update legacy check-in rows directly'
+);
+select throws_ok(
+  $$
+    insert into public.daily_checkins (user_id, local_date)
+    values (
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      current_date - 1
+    )
+  $$,
+  '42501',
+  'permission denied for table daily_checkins',
+  'authenticated clients cannot insert legacy check-in rows directly'
+);
+select throws_ok(
+  $$
+    delete from public.daily_checkins
+    where user_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+  $$,
+  '42501',
+  'permission denied for table daily_checkins',
+  'authenticated clients cannot delete legacy check-in rows directly'
 );
 select throws_ok(
   $$
@@ -324,15 +520,30 @@ select throws_ok(
   'permission denied for table plans',
   'User A cannot alter User B plan'
 );
-select results_eq(
+select throws_ok(
   $$
     update public.foods
     set english_name = 'tampered'
     where id = 'b2000000-0000-4000-8000-000000000001'
-    returning id
   $$,
-  $$ select null::uuid where false $$,
-  'User A cannot alter User B private food'
+  '42501',
+  'permission denied for table foods',
+  'authenticated clients cannot alter food trust records directly'
+);
+select throws_ok(
+  $$ select count(*) from public.external_food_lookup_requests $$,
+  '42501',
+  'permission denied for table external_food_lookup_requests',
+  'authenticated clients cannot inspect external lookup accounting'
+);
+select throws_ok(
+  $$
+    delete from public.food_label_submissions
+    where id = 'b7000000-0000-4000-8000-000000000001'
+  $$,
+  '42501',
+  'permission denied for table food_label_submissions',
+  'authenticated clients cannot orphan label objects through direct deletion'
 );
 select throws_ok(
   $$ select public.accept_plan('b3000000-0000-4000-8000-000000000001') $$,
@@ -420,6 +631,12 @@ select throws_ok(
   '42501',
   'permission denied for table plans',
   'an unauthenticated request is denied read access to plans'
+);
+select throws_ok(
+  $$ select count(*) from public.daily_meal_checkins $$,
+  '42501',
+  'permission denied for table daily_meal_checkins',
+  'an unauthenticated request is denied meal-slot access'
 );
 
 select * from finish();

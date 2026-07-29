@@ -11,7 +11,7 @@ fi
 
 ./scripts/services-start
 
-printf 'Starting Cutting Plan at http://localhost:%s\n' "${PORT:-3000}"
+printf "Starting Let's Go Green! at http://localhost:%s\n" "${PORT:-3000}"
 printf 'Supabase Studio and captured-email URLs are listed by npm run bootstrap and npm run doctor.\n'
 
 exec ./node_modules/.bin/next dev \

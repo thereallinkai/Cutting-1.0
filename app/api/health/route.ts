@@ -6,7 +6,7 @@ import {
 } from "@/src/lib/env";
 import { createSupabaseAdminClient } from "@/src/lib/supabase/admin";
 
-const EXPECTED_MIGRATION = "20260728010000_validate_plan_payload_structure";
+const EXPECTED_MIGRATION = "20260729010000_database_release_hardening";
 
 export async function GET() {
   let database: "reachable" | "unavailable" | "not_configured" = "not_configured";

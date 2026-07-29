@@ -158,7 +158,7 @@ export class OpenAIPlanProvider implements PlanProvider {
           ...input,
           safetyIdentifier: undefined,
         }),
-        text: { format: zodTextFormat(aiPlanSchema, "cutting_plan") },
+        text: { format: zodTextFormat(aiPlanSchema, "lets_go_green_plan") },
         reasoning: { effort: "low" },
         store: false,
         safety_identifier: input.safetyIdentifier,

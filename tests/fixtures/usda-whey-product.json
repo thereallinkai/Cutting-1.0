@@ -1,0 +1,22 @@
+{
+  "fdcId": 2464134,
+  "description": "GOLD STANDARD 100% WHEY, DOUBLE RICH CHOCOLATE",
+  "dataType": "Branded",
+  "brandName": "OPTIMUM NUTRITION",
+  "brandOwner": "Glanbia Performance Nutrition",
+  "gtinUpc": "748927028669",
+  "servingSize": 30.4,
+  "servingSizeUnit": "g",
+  "packageWeight": "2 lb",
+  "ingredients": "Whey protein blend, cocoa, lecithin, flavor.",
+  "allergenStatement": "Contains milk and soy.",
+  "publicationDate": "2024-01-18",
+  "foodNutrients": [
+    { "nutrient": { "id": 1008, "number": "1008", "name": "Energy", "unitName": "kcal" }, "amount": 395 },
+    { "nutrient": { "id": 1003, "number": "1003", "name": "Protein", "unitName": "g" }, "amount": 79 },
+    { "nutrient": { "id": 1005, "number": "1005", "name": "Carbohydrate, by difference", "unitName": "g" }, "amount": 9.87 },
+    { "nutrient": { "id": 1004, "number": "1004", "name": "Total lipid (fat)", "unitName": "g" }, "amount": 4.93 },
+    { "nutrient": { "id": 1079, "number": "1079", "name": "Fiber, total dietary", "unitName": "g" }, "amount": 3.3 },
+    { "nutrient": { "id": 1093, "number": "1093", "name": "Sodium, Na", "unitName": "mg" }, "amount": 164 }
+  ]
+}

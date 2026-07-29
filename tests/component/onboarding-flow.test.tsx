@@ -64,6 +64,7 @@ function jsonResponse(body: unknown, status = 200) {
 
 function mockCompletionRequests(options?: {
   putResponse?: Response;
+  generationResponses?: Response[];
   foods?: Array<{
     slug: string;
     english_name: string;
@@ -91,6 +92,7 @@ function mockCompletionRequests(options?: {
       plan_eligible: true,
     },
   ];
+  const generationResponses = [...(options?.generationResponses ?? [])];
   const fetchMock = vi.fn(
     async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
@@ -110,6 +112,22 @@ function mockCompletionRequests(options?: {
       if (url.endsWith("/api/foods")) {
         return jsonResponse({ data: foods, error: null });
       }
+      if (
+        url.endsWith("/api/plans/generate") &&
+        init?.method === "POST"
+      ) {
+        return generationResponses.shift()
+          ?? jsonResponse(
+            {
+              data: null,
+              error: {
+                code: "PLAN_GENERATION_FAILED",
+                message: "Plan generation failed.",
+              },
+            },
+            500,
+          );
+      }
       return jsonResponse({ data: null, error: { code: "NOT_FOUND", message: "Not found." } }, 404);
     },
   );
@@ -128,7 +146,7 @@ describe("OnboardingFlow navigation and restoration", () => {
 
   it("restores a local draft and preserves it across forward and back navigation", async () => {
     window.localStorage.setItem(
-      "cutting-plan-onboarding-draft",
+      "lets-go-green-onboarding-draft",
       JSON.stringify({
         currentWeight: "82.5",
         targetWeight: "76",
@@ -159,6 +177,83 @@ describe("OnboardingFlow navigation and restoration", () => {
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Current weight")).toHaveValue("82.5");
     expect(screen.getByLabelText("Target weight")).toHaveValue("76");
+  });
+
+  it("does not autosave until the account draft has finished hydrating", async () => {
+    let resolveHydration!: (response: Response) => void;
+    const hydrationResponse = new Promise<Response>((resolve) => {
+      resolveHydration = resolve;
+    });
+    const fetchMock = vi.fn(
+      (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith("/api/onboarding") && init?.method === "PATCH") {
+          return Promise.resolve(
+            jsonResponse({ data: { saved: true }, error: null }),
+          );
+        }
+        if (url.endsWith("/api/onboarding")) return hydrationResponse;
+        if (url.endsWith("/api/foods")) {
+          return Promise.resolve(jsonResponse({ data: [], error: null }));
+        }
+        return Promise.resolve(
+          jsonResponse(
+            {
+              data: null,
+              error: { code: "NOT_FOUND", message: "Not found." },
+            },
+            404,
+          ),
+        );
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<OnboardingFlow initialStep={3} />);
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith("/api/onboarding");
+    });
+    await new Promise((resolve) => window.setTimeout(resolve, 550));
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          String(input).endsWith("/api/onboarding") &&
+          init?.method === "PATCH",
+      ),
+    ).toBe(false);
+
+    resolveHydration(
+      jsonResponse({
+        data: {
+          currentStep: 4,
+          draft: {
+            currentWeight: "84",
+            targetWeight: "76",
+            unit: "kg",
+          },
+        },
+        error: null,
+      }),
+    );
+
+    await waitFor(
+      () => {
+        const patchCall = fetchMock.mock.calls.find(
+          ([input, init]) =>
+            String(input).endsWith("/api/onboarding") &&
+            init?.method === "PATCH",
+        );
+        expect(patchCall).toBeDefined();
+        expect(JSON.parse(String(patchCall?.[1]?.body)).draft).toEqual(
+          expect.objectContaining({
+            currentWeight: "84",
+            targetWeight: "76",
+            unit: "kg",
+          }),
+        );
+      },
+      { timeout: 1_500 },
+    );
   });
 
   it("reviews meal warnings before moving forward and supports going back", async () => {
@@ -312,7 +407,7 @@ describe("OnboardingFlow food preferences", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Saved label food — not yet eligible for generated plans.",
+        "Reference food — not yet eligible for generated plans.",
       ),
     ).toBeInTheDocument();
 
@@ -385,7 +480,7 @@ describe("OnboardingFlow completion", () => {
 
   it("shows a safe API error message when final profile persistence fails", async () => {
     window.localStorage.setItem(
-      "cutting-plan-onboarding-draft",
+      "lets-go-green-onboarding-draft",
       JSON.stringify(completionDraft()),
     );
     const safeMessage =
@@ -431,7 +526,7 @@ describe("OnboardingFlow completion", () => {
 
   it("conveys an imperial height through successful Step 6 completion", async () => {
     window.localStorage.setItem(
-      "cutting-plan-onboarding-draft",
+      "lets-go-green-onboarding-draft",
       JSON.stringify(completionDraft({ height: "5 ft 10 in" })),
     );
     const fetchMock = mockCompletionRequests();
@@ -456,15 +551,19 @@ describe("OnboardingFlow completion", () => {
       expect.objectContaining({
         height: "5 ft 10 in",
         unit: "lb",
-        currentWeightKg: expect.closeTo(95.254, 3),
-        targetWeightKg: expect.closeTo(90.718, 3),
       }),
+    );
+    expect(JSON.parse(String(putCall?.[1]?.body))).not.toHaveProperty(
+      "currentWeightKg",
+    );
+    expect(JSON.parse(String(putCall?.[1]?.body))).not.toHaveProperty(
+      "targetWeightKg",
     );
   });
 
   it("normalizes a restored legacy vegetable powder slug before completion", async () => {
     window.localStorage.setItem(
-      "cutting-plan-onboarding-draft",
+      "lets-go-green-onboarding-draft",
       JSON.stringify(
         completionDraft({
           meals: {
@@ -517,5 +616,141 @@ describe("OnboardingFlow completion", () => {
     expect(JSON.parse(String(putCall?.[1]?.body)).meals.dinner).toEqual([
       "vegetable-or-vitamin-powder",
     ]);
+  });
+
+  it("rechecks an in-progress generation with the same idempotency key", async () => {
+    window.localStorage.setItem(
+      "lets-go-green-onboarding-draft",
+      JSON.stringify(completionDraft()),
+    );
+    const fetchMock = mockCompletionRequests({
+      generationResponses: [
+        jsonResponse(
+          {
+            data: {
+              requestId: "request-1",
+              planId: null,
+              status: "processing",
+              replayed: true,
+            },
+            error: null,
+          },
+          202,
+        ),
+        jsonResponse({
+          data: {
+            requestId: "request-1",
+            planId: "plan-1",
+            status: "succeeded",
+            replayed: true,
+          },
+          error: null,
+        }),
+      ],
+    });
+    const user = userEvent.setup();
+    render(<OnboardingFlow initialStep={6} />);
+
+    await screen.findByText("fat loss · 210 lb → 200 lb · 2026-08-31");
+    expect(
+      screen.getByText(
+        /Exact verified food names and catalog IDs, including brand, product, and flavor names/,
+      ),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("checkbox", {
+        name: "I have reviewed this information and want to complete onboarding.",
+      }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: /Generate my plan/ }),
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Your plan is still being generated.",
+    );
+    expect(router.push).not.toHaveBeenCalledWith("/plan");
+
+    await user.click(
+      screen.getByRole("button", { name: /Generate my plan/ }),
+    );
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith("/plan"));
+
+    const generationCalls = fetchMock.mock.calls.filter(
+      ([input, init]) =>
+        String(input).endsWith("/api/plans/generate") &&
+        init?.method === "POST",
+    );
+    expect(generationCalls).toHaveLength(2);
+    const firstKey = JSON.parse(String(generationCalls[0]?.[1]?.body))
+      .idempotencyKey;
+    const secondKey = JSON.parse(String(generationCalls[1]?.[1]?.body))
+      .idempotencyKey;
+    expect(secondKey).toBe(firstKey);
+  });
+
+  it("uses a new idempotency key after a terminal generation failure", async () => {
+    window.localStorage.setItem(
+      "lets-go-green-onboarding-draft",
+      JSON.stringify(completionDraft()),
+    );
+    const fetchMock = mockCompletionRequests({
+      generationResponses: [
+        jsonResponse(
+          {
+            data: null,
+            error: {
+              code: "PLAN_REQUEST_FAILED",
+              message:
+                "That plan request did not finish. Start a new generation request.",
+            },
+          },
+          409,
+        ),
+        jsonResponse(
+          {
+            data: {
+              requestId: "request-2",
+              planId: "plan-2",
+              status: "generated",
+            },
+            error: null,
+          },
+          201,
+        ),
+      ],
+    });
+    const user = userEvent.setup();
+    render(<OnboardingFlow initialStep={6} />);
+
+    await screen.findByText("fat loss · 210 lb → 200 lb · 2026-08-31");
+    await user.click(
+      screen.getByRole("checkbox", {
+        name: "I have reviewed this information and want to complete onboarding.",
+      }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: /Generate my plan/ }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Start a new generation request.",
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: /Generate my plan/ }),
+    );
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith("/plan"));
+
+    const generationCalls = fetchMock.mock.calls.filter(
+      ([input, init]) =>
+        String(input).endsWith("/api/plans/generate") &&
+        init?.method === "POST",
+    );
+    expect(generationCalls).toHaveLength(2);
+    const firstKey = JSON.parse(String(generationCalls[0]?.[1]?.body))
+      .idempotencyKey;
+    const secondKey = JSON.parse(String(generationCalls[1]?.[1]?.body))
+      .idempotencyKey;
+    expect(secondKey).not.toBe(firstKey);
   });
 });

@@ -1,18 +1,21 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import {
   Check,
   ChevronRight,
   Circle,
   Coffee,
+  Cookie,
   Dumbbell,
   MoonStar,
+  Plus,
   Scale,
   Sparkles,
   Sun,
   Utensils,
+  X,
 } from "lucide-react";
 import {
   CartesianGrid,
@@ -24,19 +27,61 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { localDateInTimeZone } from "@/src/lib/domain";
+import { NutritionFactsCard } from "@/components/nutrition-facts-card";
+import {
+  MEAL_SLOT_LABELS,
+  MEAL_SLOTS,
+  SNACK_MEAL_TYPES,
+  isPrimaryMealType,
+  localDateInTimeZone,
+  normalizeMealSlotCheckins,
+  summarizeMealCheckins,
+  type MealCheckinStatus,
+  type MealSlot,
+  type MealSlotCheckin,
+  type PrimaryMealType,
+} from "@/src/lib/domain";
+import type {
+  FoodNutritionFacts,
+  FoodSourceSummary,
+} from "@/src/lib/domain/food-catalog";
 
-type MealKey = "breakfast" | "lunch" | "dinner";
+export type TodayMealItem = {
+  id: string;
+  foodId: string;
+  name: string;
+  verificationStatus: string;
+};
+
+export type TodayMealCheckin = MealSlotCheckin & {
+  items: TodayMealItem[];
+};
+
+type CatalogFood = {
+  id: string;
+  english_name: string;
+  verification_status: string;
+  plan_eligible?: boolean;
+  brand_name?: string | null;
+  variant_name?: string | null;
+  gtin?: string | null;
+  catalog_status?: "active" | "pending_review" | "rejected" | "retired";
+  nutrition?: FoodNutritionFacts | null;
+  source?: FoodSourceSummary | null;
+};
 
 const demoMeals: Array<{
-  key: MealKey;
+  key: MealSlot;
   label: string;
   detail: string;
   Icon: typeof Coffee;
 }> = [
   { key: "breakfast", label: "Breakfast", detail: "Oats, yogurt & blueberries", Icon: Coffee },
+  { key: "morning_snack", label: "Morning snack", detail: "No snack recorded", Icon: Cookie },
   { key: "lunch", label: "Lunch", detail: "Rice bowl with chicken & greens", Icon: Sun },
+  { key: "afternoon_snack", label: "Afternoon snack", detail: "No snack recorded", Icon: Cookie },
   { key: "dinner", label: "Dinner", detail: "Salmon, potato & broccoli", Icon: MoonStar },
+  { key: "evening_snack", label: "Evening snack", detail: "No snack recorded", Icon: Cookie },
 ];
 
 const demoWeightData = [
@@ -54,6 +99,7 @@ export type TodayWeightPoint = { day: string; weight: number };
 export function TodayDashboard({
   name = "Jamie",
   timeZone = "America/New_York",
+  initialCheckins,
   initialCompleted = {
     breakfast: true,
     lunch: true,
@@ -64,6 +110,7 @@ export function TodayDashboard({
   providerLabel = "Mock AI plan — development only",
   weeklyMarked = 10,
   weeklyPossible = 12,
+  weeklySkipped = 0,
   energyRange,
   proteinRange,
   goalContext,
@@ -71,12 +118,14 @@ export function TodayDashboard({
 }: {
   name?: string;
   timeZone?: string;
-  initialCompleted?: Record<MealKey, boolean>;
-  mealDetails?: Partial<Record<MealKey, string>>;
+  initialCheckins?: TodayMealCheckin[];
+  initialCompleted?: Record<PrimaryMealType, boolean>;
+  mealDetails?: Partial<Record<MealSlot, string>>;
   weightPoints?: TodayWeightPoint[];
   providerLabel?: string;
   weeklyMarked?: number;
   weeklyPossible?: number;
+  weeklySkipped?: number;
   energyRange?: { minimum: number; maximum: number } | null;
   proteinRange?: { minimum: number; maximum: number } | null;
   goalContext?: {
@@ -89,11 +138,35 @@ export function TodayDashboard({
   } | null;
   demoMode?: boolean;
 }) {
-  const [completed, setCompleted] =
-    useState<Record<MealKey, boolean>>(initialCompleted);
+  const fallbackCheckins: TodayMealCheckin[] = normalizeMealSlotCheckins(
+    MEAL_SLOTS.map((mealType) => ({
+      mealType,
+      status:
+        isPrimaryMealType(mealType) && initialCompleted[mealType]
+          ? "completed"
+          : "not_marked",
+      skipReason: null,
+    })),
+  ).map((checkin) => ({ ...checkin, items: [] }));
+  const [checkins, setCheckins] = useState<TodayMealCheckin[]>(
+    initialCheckins ?? fallbackCheckins,
+  );
   const [announcement, setAnnouncement] = useState("");
-  const [saving, setSaving] = useState<MealKey | null>(null);
-  const count = Object.values(completed).filter(Boolean).length;
+  const [saving, setSaving] = useState<MealSlot | null>(null);
+  const [skipEditor, setSkipEditor] = useState<MealSlot | null>(null);
+  const [skipReason, setSkipReason] = useState("");
+  const [foodEditor, setFoodEditor] = useState<MealSlot | null>(null);
+  const [foodSearch, setFoodSearch] = useState("");
+  const [catalogFoods, setCatalogFoods] = useState<CatalogFood[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const mainSummary = summarizeMealCheckins(checkins);
+  const snackCount = checkins.filter(
+    (checkin) =>
+      SNACK_MEAL_TYPES.includes(
+        checkin.mealType as (typeof SNACK_MEAL_TYPES)[number],
+      ) &&
+      (checkin.status === "completed" || checkin.items.length > 0),
+  ).length;
   const localDate = useMemo(
     () =>
       new Intl.DateTimeFormat("en-US", {
@@ -110,32 +183,203 @@ export function TodayDashboard({
       mealDetails?.[meal.key] ??
       (demoMode
         ? meal.detail
-        : "No accepted plan meal is available for this day."),
+        : isPrimaryMealType(meal.key)
+          ? "No accepted plan meal is available for this day."
+          : "Optional space for food eaten between meals."),
   }));
 
-  async function updateMeal(meal: MealKey) {
+  function checkinFor(mealType: MealSlot) {
+    return checkins.find((checkin) => checkin.mealType === mealType)!;
+  }
+
+  async function updateMeal(
+    meal: MealSlot,
+    status: MealCheckinStatus,
+    reason: string | null = null,
+  ) {
     if (saving) return;
-    const previous = completed;
-    const desired = { ...completed, [meal]: !completed[meal] };
-    setCompleted(desired);
+    if (
+      status === "skipped" &&
+      checkinFor(meal).items.length > 0
+    ) {
+      setSkipEditor(null);
+      setSkipReason("");
+      setAnnouncement(
+        "Remove recorded foods before marking this slot skipped.",
+      );
+      return;
+    }
+    const previous = checkins;
+    const desired = checkins.map((checkin) =>
+      checkin.mealType === meal
+        ? {
+            ...checkin,
+            status,
+            skipReason: status === "skipped" ? reason : null,
+          }
+        : checkin,
+    );
+    setCheckins(desired);
     setSaving(meal);
     const label = meals.find((item) => item.key === meal)?.label ?? meal;
     try {
       const localDay = localDateInTimeZone(new Date(), timeZone);
       const response = await fetch(`/api/checkins/${localDay}`, {
-        method: "PUT",
+        method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          breakfastCompleted: desired.breakfast,
-          lunchCompleted: desired.lunch,
-          dinnerCompleted: desired.dinner,
+          kind: "meal_status",
+          mealType: meal,
+          status,
+          skipReason: status === "skipped" ? reason : null,
         }),
       });
       if (!response.ok) throw new Error("save_failed");
-      setAnnouncement(`${label} is now ${desired[meal] ? "completed" : "not marked"}.`);
+      setSkipEditor(null);
+      setSkipReason("");
+      setAnnouncement(
+        `${label} is now ${status.replace("_", " ")}.`,
+      );
     } catch {
-      setCompleted(previous);
+      setCheckins(previous);
       setAnnouncement(`We could not save ${label}. Your previous status was restored.`);
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function loadFoods(query = "") {
+    setCatalogLoading(true);
+    try {
+      const response = await fetch(
+        `/api/foods?q=${encodeURIComponent(query.trim())}`,
+      );
+      if (!response.ok) throw new Error("load_failed");
+      const result = (await response.json()) as { data?: CatalogFood[] };
+      setCatalogFoods(result.data ?? []);
+    } catch {
+      setCatalogFoods([]);
+      setAnnouncement("The food catalog could not be loaded. Please try again.");
+    } finally {
+      setCatalogLoading(false);
+    }
+  }
+
+  function openFoodPicker(mealType: MealSlot) {
+    setFoodEditor(mealType);
+    setFoodSearch("");
+    void loadFoods();
+  }
+
+  function searchFoods(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void loadFoods(foodSearch);
+  }
+
+  async function addFood(mealType: MealSlot, food: CatalogFood) {
+    if (saving) return;
+    setSaving(mealType);
+    const localDay = localDateInTimeZone(new Date(), timeZone);
+    try {
+      const response = await fetch(`/api/checkins/${localDay}/items`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mealType, foodId: food.id }),
+      });
+      if (!response.ok) throw new Error("save_failed");
+      const result = (await response.json()) as {
+        data?: {
+          id?: string;
+          food?: {
+            id: string;
+            english_name: string;
+            verification_status: string;
+          };
+        };
+      };
+      const itemId = result.data?.id ?? `${mealType}-${food.id}`;
+      const storedFood = result.data?.food ?? food;
+      setCheckins((current) =>
+        current.map((checkin) =>
+          checkin.mealType === mealType
+            ? {
+                ...checkin,
+                status: "completed",
+                skipReason: null,
+                items: checkin.items.some((item) => item.foodId === food.id)
+                  ? checkin.items
+                  : [
+                      ...checkin.items,
+                      {
+                        id: itemId,
+                        foodId: storedFood.id,
+                        name: storedFood.english_name,
+                        verificationStatus: storedFood.verification_status,
+                      },
+                    ],
+              }
+            : checkin,
+        ),
+      );
+      setFoodEditor(null);
+      setSkipEditor(null);
+      setSkipReason("");
+      setAnnouncement(
+        `${food.english_name} was added to ${MEAL_SLOT_LABELS[mealType]}.`,
+      );
+    } catch {
+      setAnnouncement(
+        `${food.english_name} could not be added. No food record was changed.`,
+      );
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function removeFood(mealType: MealSlot, item: TodayMealItem) {
+    if (saving) return;
+    setSaving(mealType);
+    const localDay = localDateInTimeZone(new Date(), timeZone);
+    const currentMeal = checkinFor(mealType);
+    const isFinalRecordedSnack =
+      SNACK_MEAL_TYPES.includes(
+        mealType as (typeof SNACK_MEAL_TYPES)[number],
+      ) &&
+      currentMeal.status === "completed" &&
+      currentMeal.items.length === 1 &&
+      currentMeal.items[0]?.id === item.id;
+    try {
+      const response = await fetch(
+        `/api/checkins/${localDay}/items/${encodeURIComponent(item.id)}`,
+        { method: "DELETE" },
+      );
+      if (!response.ok) throw new Error("delete_failed");
+
+      setCheckins((current) =>
+        current.map((checkin) =>
+          checkin.mealType === mealType
+            ? {
+                ...checkin,
+                status:
+                  isFinalRecordedSnack ? "not_marked" : checkin.status,
+                skipReason:
+                  isFinalRecordedSnack ? null : checkin.skipReason,
+                items: checkin.items.filter(
+                  (candidate) => candidate.id !== item.id,
+                ),
+              }
+            : checkin,
+        ),
+      );
+      setAnnouncement(
+        `${item.name} was removed from ${MEAL_SLOT_LABELS[mealType]}.${
+          isFinalRecordedSnack ? " The empty snack is now not marked." : ""
+        }`,
+      );
+    } catch {
+      setAnnouncement(
+        `${item.name} could not be removed. The food record remains.`,
+      );
     } finally {
       setSaving(null);
     }
@@ -165,13 +409,18 @@ export function TodayDashboard({
               <span className="source-label ai">
                 <Sparkles size={14} aria-hidden="true" /> {providerLabel}
               </span>
-              <h2>{count === 3 ? "Today is fully marked." : "You’re building today’s rhythm."}</h2>
+              <h2>{mainSummary.marked === 3 ? "Today is fully marked." : "You’re building today’s rhythm."}</h2>
               <p>
-                {count} of 3 meals marked. A meal can always be returned to not marked.
+                {mainSummary.marked} of 3 planned meals marked
+                {mainSummary.skipped
+                  ? ` · ${mainSummary.skipped} skipped`
+                  : ""}
+                {snackCount ? ` · ${snackCount} snacks recorded` : ""}. A
+                meal can always be returned to not marked.
               </p>
             </div>
-            <div className="status-ring" aria-label={`${count} of 3 meals completed`}>
-              <span>{count}/3</span>
+            <div className="status-ring" aria-label={`${mainSummary.marked} of 3 planned meals marked`}>
+              <span>{mainSummary.marked}/3</span>
             </div>
           </article>
 
@@ -179,28 +428,214 @@ export function TodayDashboard({
             <div className="card-title">
               <div>
                 <h2>Today&apos;s meals</h2>
-                <p>Tap once to mark; tap again to undo.</p>
+                <p>Record meals, optional snacks, or a neutral skipped status.</p>
               </div>
               <span className="source-label"><Utensils size={14} /> Provided by you</span>
             </div>
             <div className="meal-list">
               {meals.map(({ key, label, detail, Icon }) => (
-                <div className="meal-row" key={key}>
+                <div className="meal-row" key={key} style={{ flexWrap: "wrap" }}>
                   <span className="meal-icon" aria-hidden="true"><Icon size={20} /></span>
-                  <div>
+                  <div style={{ flex: "1 1 14rem" }}>
                     <span>{label}</span>
                     <strong>{detail}</strong>
+                    {checkinFor(key).items.length ? (
+                      <ul aria-label={`${label} recorded foods`} style={{ margin: ".45rem 0 0", paddingLeft: "1.2rem" }}>
+                        {checkinFor(key).items.map((item) => (
+                          <li key={item.id}>
+                            {item.name}{" "}
+                            <button
+                              aria-label={`Remove ${item.name} from ${label}`}
+                              className="text-link"
+                              disabled={saving !== null}
+                              onClick={() => void removeFood(key, item)}
+                              type="button"
+                            >
+                              Remove
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    {checkinFor(key).status === "skipped" ? (
+                      <small>
+                        Skipped
+                        {checkinFor(key).skipReason
+                          ? ` · ${checkinFor(key).skipReason}`
+                          : " · no reason provided"}
+                      </small>
+                    ) : null}
+                    {checkinFor(key).items.length > 0 ? (
+                      <small id={`skip-help-${key}`}>
+                        Remove recorded foods before marking this slot skipped.
+                      </small>
+                    ) : null}
                   </div>
-                  <button
-                    className={`check-button ${completed[key] ? "complete" : ""}`}
-                    type="button"
-                    aria-pressed={completed[key]}
-                    disabled={saving !== null}
-                    onClick={() => updateMeal(key)}
-                  >
-                    {completed[key] ? <Check size={16} aria-hidden="true" /> : <Circle size={15} aria-hidden="true" />}
-                    {saving === key ? "Saving…" : completed[key] ? "Completed" : "Not marked"}
-                  </button>
+                  <div className="meal-actions">
+                    <button
+                      className={`check-button ${checkinFor(key).status === "completed" ? "complete" : ""}`}
+                      type="button"
+                      aria-pressed={checkinFor(key).status === "completed"}
+                      disabled={saving !== null}
+                      onClick={() =>
+                        void updateMeal(
+                          key,
+                          checkinFor(key).status === "completed"
+                            ? "not_marked"
+                            : "completed",
+                        )
+                      }
+                    >
+                      {checkinFor(key).status === "completed" ? <Check size={16} aria-hidden="true" /> : <Circle size={15} aria-hidden="true" />}
+                      {saving === key ? "Saving…" : checkinFor(key).status === "completed" ? "Completed" : "Mark completed"}
+                    </button>
+                    <button
+                      className="button button-quiet"
+                      aria-describedby={
+                        checkinFor(key).items.length > 0
+                          ? `skip-help-${key}`
+                          : undefined
+                      }
+                      disabled={
+                        saving !== null ||
+                        (checkinFor(key).status !== "skipped" &&
+                          checkinFor(key).items.length > 0)
+                      }
+                      onClick={() => {
+                        if (checkinFor(key).status === "skipped") {
+                          void updateMeal(key, "not_marked");
+                        } else {
+                          setSkipEditor(key);
+                          setSkipReason("");
+                        }
+                      }}
+                      type="button"
+                    >
+                      {checkinFor(key).status === "skipped" ? "Return to not marked" : "Skip"}
+                    </button>
+                    {!isPrimaryMealType(key) ? (
+                      <button
+                        className="button button-quiet"
+                        disabled={saving !== null}
+                        onClick={() => openFoodPicker(key)}
+                        type="button"
+                      >
+                        <Plus size={15} aria-hidden="true" /> Add food
+                      </button>
+                    ) : null}
+                  </div>
+                  {skipEditor === key ? (
+                    <div className="meal-inline-editor">
+                      <label className="field">
+                        <span className="field-label">Optional reason for skipping {label.toLowerCase()}</span>
+                        <input
+                          maxLength={500}
+                          onChange={(event) => setSkipReason(event.target.value)}
+                          placeholder="You can leave this blank"
+                          value={skipReason}
+                        />
+                      </label>
+                      <div className="header-actions">
+                        <button
+                          className="button button-dark"
+                          disabled={
+                            saving !== null ||
+                            checkinFor(key).items.length > 0
+                          }
+                          onClick={() => void updateMeal(key, "skipped", skipReason.trim() || null)}
+                          type="button"
+                        >
+                          Save skipped status
+                        </button>
+                        <button
+                          className="button button-quiet"
+                          onClick={() => setSkipEditor(null)}
+                          type="button"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                  {foodEditor === key ? (
+                    <div className="meal-inline-editor">
+                      <form onSubmit={searchFoods}>
+                        <label className="field">
+                          <span className="field-label">Find food for {label.toLowerCase()}</span>
+                          <input
+                            onChange={(event) => setFoodSearch(event.target.value)}
+                            placeholder="Search the catalog"
+                            value={foodSearch}
+                          />
+                        </label>
+                        <div className="header-actions">
+                          <button className="button button-dark" disabled={catalogLoading} type="submit">
+                            {catalogLoading ? "Searching…" : "Search"}
+                          </button>
+                          <button className="button button-quiet" onClick={() => setFoodEditor(null)} type="button">
+                            <X size={15} aria-hidden="true" /> Close
+                          </button>
+                        </div>
+                      </form>
+                      {catalogFoods.length ? (
+                        <ul
+                          aria-label="Food search results"
+                          className="snack-food-results"
+                        >
+                          {catalogFoods.slice(0, 12).map((food) => (
+                            <li className="snack-food-result" key={food.id}>
+                              <div className="snack-food-result-copy">
+                                <strong>{food.english_name}</strong>
+                                {food.brand_name ||
+                                food.variant_name ||
+                                food.gtin ? (
+                                  <p className="field-help">
+                                    {[food.brand_name, food.variant_name]
+                                      .filter(Boolean)
+                                      .join(" · ")}
+                                    {food.gtin
+                                      ? ` · barcode ${food.gtin}`
+                                      : ""}
+                                  </p>
+                                ) : null}
+                                <small className="source-label">
+                                  {food.catalog_status === "pending_review"
+                                    ? "Pending catalog review"
+                                    : food.verification_status.replaceAll(
+                                        "_",
+                                        " ",
+                                      )}
+                                </small>
+                                <NutritionFactsCard
+                                  compact
+                                  nutrition={food.nutrition ?? null}
+                                  source={food.source}
+                                />
+                                {food.plan_eligible === false ||
+                                food.catalog_status === "pending_review" ? (
+                                  <p className="field-help">
+                                    Reference food — available for daily logging,
+                                    but not for generated plans until reviewed.
+                                  </p>
+                                ) : null}
+                              </div>
+                              <button
+                                aria-label={`Add ${food.english_name} to ${label}`}
+                                className="button button-quiet"
+                                disabled={saving !== null}
+                                onClick={() => void addFood(key, food)}
+                                type="button"
+                              >
+                                Add
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : !catalogLoading ? (
+                        <p className="field-help">No matching foods are available.</p>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               ))}
             </div>
@@ -274,7 +709,8 @@ export function TodayDashboard({
             </div>
             <div className="metric-grid">
               <div className="metric"><span>Meals marked</span><strong>{weeklyMarked} / {weeklyPossible}</strong></div>
-              <div className="metric"><span>Completion</span><strong>{weeklyPossible ? Math.round((weeklyMarked / weeklyPossible) * 100) : 0}%</strong></div>
+              <div className="metric"><span>Check-ins recorded</span><strong>{weeklyPossible ? Math.round((weeklyMarked / weeklyPossible) * 100) : 0}%</strong></div>
+              <div className="metric"><span>Skipped</span><strong>{weeklySkipped}</strong></div>
             </div>
             <p className="chart-alt">Calculated by the app from your check-ins.</p>
           </article>

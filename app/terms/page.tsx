@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Leaf } from "lucide-react";
+import { BrandLink } from "@/components/brand-link";
+import { BRAND } from "@/src/lib/brand";
 
 export const metadata: Metadata = { title: "Terms of Use" };
 
@@ -8,13 +9,13 @@ export default function TermsPage() {
   return (
     <main id="main-content" className="legal-page">
       <header>
-        <Link className="brand" href="/"><span className="brand-mark"><Leaf size={18} /></span>Cutting Plan</Link>
+        <BrandLink />
         <Link className="text-link" href="/register">Back to signup</Link>
       </header>
-      <p className="eyebrow">Version 1.0 · July 24, 2026</p>
+      <p className="eyebrow">Version 1.1 · July 28, 2026</p>
       <h1>Terms of Use</h1>
       <p>
-        Cutting Plan offers general wellness information, meal-planning tools,
+        {BRAND.name} offers general wellness information, meal-planning tools,
         and habit tracking. It is not a medical service and does not diagnose,
         treat, or guarantee health or weight outcomes.
       </p>
@@ -35,8 +36,12 @@ export default function TermsPage() {
       </p>
       <h2>Your content and account</h2>
       <p>
-        You retain responsibility for information you enter. You may export or
-        request deletion of your account through Settings. Legal and security
+        You retain responsibility for information you enter and for accurately
+        transcribing a package label. When a confirmed label has a barcode, you
+        permit the app to create a non-personal, normalized product-facts record
+        for the pending-review shared catalog. Raw label photos remain private.
+        You may export your account data through Settings. Account deletion must
+        be implemented before a public production launch. Legal and security
         records may be retained when required to protect users or comply with law.
       </p>
       <h2>Changes</h2>

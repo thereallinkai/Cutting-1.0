@@ -97,11 +97,11 @@ if [[ ! -f supabase/.env ]]; then
   } > supabase/.env
 fi
 chmod 600 supabase/.env
-if grep -Eq '^[[:space:]]*CUTTING_PLAN_AUTH_REDIRECT_URL=' supabase/.env; then
+if grep -Eq '^[[:space:]]*LETS_GO_GREEN_AUTH_REDIRECT_URL=' supabase/.env; then
   printf 'Preserving the existing managed Auth redirect in supabase/.env; the current runtime value takes precedence.\n'
 else
-  printf 'CUTTING_PLAN_AUTH_REDIRECT_URL=%s\n' \
-    "$CUTTING_PLAN_AUTH_REDIRECT_URL" >> supabase/.env
+  printf 'LETS_GO_GREEN_AUTH_REDIRECT_URL=%s\n' \
+    "$LETS_GO_GREEN_AUTH_REDIRECT_URL" >> supabase/.env
 fi
 
 ./scripts/services-start
@@ -181,12 +181,12 @@ if curl --connect-timeout 2 --max-time 4 --silent --show-error --fail "$APP_HEAL
   printf 'Reusing the running application for its health check.\n'
 else
   if command -v nc >/dev/null 2>&1 && nc -z 127.0.0.1 3000 >/dev/null 2>&1; then
-    fail "Port 3000 is occupied by a process that does not provide the Cutting Plan health endpoint."
+    fail "Port 3000 is occupied by a process that does not provide the Let's Go Green! health endpoint."
   fi
 
   printf 'Starting a temporary Next.js process for the application health check...\n'
   ./node_modules/.bin/next dev --hostname 127.0.0.1 --port 3000 \
-    > /tmp/cutting-plan-bootstrap-next.log 2>&1 &
+    > /tmp/lets-go-green-bootstrap-next.log 2>&1 &
   TEMP_APP_PID=$!
 
   for attempt in $(seq 1 60); do
@@ -197,12 +197,12 @@ else
     fi
 
     if ! kill -0 "$TEMP_APP_PID" >/dev/null 2>&1; then
-      sed -n '1,200p' /tmp/cutting-plan-bootstrap-next.log >&2
+      sed -n '1,200p' /tmp/lets-go-green-bootstrap-next.log >&2
       fail "The temporary Next.js process exited before becoming healthy."
     fi
 
     if [[ "$attempt" -eq 60 ]]; then
-      sed -n '1,200p' /tmp/cutting-plan-bootstrap-next.log >&2
+      sed -n '1,200p' /tmp/lets-go-green-bootstrap-next.log >&2
       fail "The application did not become healthy within 120 seconds."
     fi
 
@@ -214,4 +214,4 @@ printf '\nBootstrap complete.\n'
 printf 'Application:          %s\n' "$APP_URL_VALUE"
 printf 'Supabase Studio:      %s\n' "${STUDIO_URL_VALUE:-http://127.0.0.1:54323}"
 printf 'Local captured email: %s\n' "${EMAIL_CAPTURE_URL_VALUE:-http://127.0.0.1:54324}"
-printf '\nRun the VS Code task \"Start Cutting Plan\" or execute npm run dev:all.\n'
+printf "\nRun the VS Code task \"Start Let's Go Green!\" or execute npm run dev:all.\n"

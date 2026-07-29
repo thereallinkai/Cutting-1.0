@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = public, extensions;
 
-select plan(40);
+select plan(61);
 
 select has_table('public', 'profiles', 'profiles table exists');
 select has_table('public', 'legal_acceptances', 'legal_acceptances table exists');
@@ -26,6 +26,33 @@ select has_table(
   'food_dietary_restrictions table exists'
 );
 select has_table('public', 'food_nutrition', 'food_nutrition table exists');
+select has_table('public', 'food_products', 'food_products table exists');
+select has_table('public', 'food_sources', 'food_sources table exists');
+select has_table(
+  'public',
+  'external_food_lookup_requests',
+  'external_food_lookup_requests table exists'
+);
+select has_table(
+  'public',
+  'food_nutrient_amounts',
+  'food_nutrient_amounts table exists'
+);
+select has_table(
+  'public',
+  'food_safety_metadata',
+  'food_safety_metadata table exists'
+);
+select has_table(
+  'public',
+  'food_label_submissions',
+  'food_label_submissions table exists'
+);
+select has_table(
+  'public',
+  'food_label_images',
+  'food_label_images table exists'
+);
 select has_table('public', 'meal_preferences', 'meal_preferences table exists');
 select has_table('public', 'onboarding_warnings', 'onboarding_warnings table exists');
 select has_table('public', 'plans', 'plans table exists');
@@ -33,6 +60,16 @@ select has_table('public', 'plan_days', 'plan_days table exists');
 select has_table('public', 'plan_meals', 'plan_meals table exists');
 select has_table('public', 'plan_items', 'plan_items table exists');
 select has_table('public', 'daily_checkins', 'daily_checkins table exists');
+select has_table(
+  'public',
+  'daily_meal_checkins',
+  'daily_meal_checkins table exists'
+);
+select has_table(
+  'public',
+  'daily_meal_items',
+  'daily_meal_items table exists'
+);
 select has_table(
   'public',
   'ai_generation_requests',
@@ -60,6 +97,13 @@ select ok(
           'food_allergens',
           'food_dietary_restrictions',
           'food_nutrition',
+          'food_products',
+          'food_sources',
+          'external_food_lookup_requests',
+          'food_nutrient_amounts',
+          'food_safety_metadata',
+          'food_label_submissions',
+          'food_label_images',
           'meal_preferences',
           'onboarding_warnings',
           'plans',
@@ -67,6 +111,8 @@ select ok(
           'plan_meals',
           'plan_items',
           'daily_checkins',
+          'daily_meal_checkins',
+          'daily_meal_items',
           'ai_generation_requests'
         ]
       )
@@ -81,6 +127,12 @@ select has_index(
   'weight_entries',
   'weight_entries_user_id_local_date_key',
   'weight entries enforce one row per user and local date'
+);
+select has_index(
+  'public',
+  'food_label_images',
+  'food_label_images_submission_kind_unique_idx',
+  'one current label image is stored for each submission and image kind'
 );
 
 select is(
@@ -106,6 +158,25 @@ select is(
   ),
   19::bigint,
   'nineteen generic foods have source-backed verified nutrition'
+);
+select ok(
+  exists (
+    select 1
+    from public.food_nutrition nutrition
+    where nutrition.id = '20000000-0000-4000-8000-000000000016'
+      and nutrition.energy_kj = 141
+      and nutrition.potassium_mg = 316
+  ),
+  'seeded broccoli includes source-reported energy and potassium'
+);
+select ok(
+  (
+    select count(*) >= 15
+    from public.food_nutrient_amounts amount
+    where amount.nutrition_id = '20000000-0000-4000-8000-000000000016'
+      and amount.nutrient_code like 'usda-%'
+  ),
+  'seeded broccoli includes a rich dynamic USDA nutrient panel'
 );
 select ok(
   not exists (
@@ -159,6 +230,29 @@ select ok(
   ),
   'whole-grain bread is excluded for the gluten-free restriction'
 );
+select ok(
+  not exists (
+    select 1
+    from public.food_nutrition nutrition
+    join public.foods food on food.id = nutrition.food_id
+    left join public.food_sources source on source.id = nutrition.source_id
+    where food.id::text like '10000000-0000-4000-8000-%'
+      and (
+        source.id is null
+        or source.food_id <> nutrition.food_id
+        or
+        (
+          nutrition.source_name = 'USDA FoodData Central'
+          and source.provider <> 'usda_fdc'
+        )
+        or (
+          nutrition.source_name <> 'USDA FoodData Central'
+          and source.provider <> 'manual_review'
+        )
+      )
+  ),
+  'deterministic seed nutrition retains its exact typed provenance'
+);
 
 select has_function(
   'public',
@@ -171,6 +265,54 @@ select has_function(
   'upsert_daily_checkin',
   array['date', 'boolean', 'boolean', 'boolean', 'text'],
   'the final-state check-in RPC exists'
+);
+select has_function(
+  'public',
+  'set_daily_meal_checkin',
+  array['date', 'meal_type', 'meal_checkin_status', 'text'],
+  'the per-slot final-state check-in RPC exists'
+);
+select has_function(
+  'public',
+  'set_daily_checkin_note',
+  array['date', 'text'],
+  'the separate check-in note RPC exists'
+);
+select has_function(
+  'public',
+  'add_daily_meal_item',
+  array['date', 'meal_type', 'uuid'],
+  'the meal-item add RPC exists'
+);
+select has_function(
+  'public',
+  'delete_daily_meal_item',
+  array['uuid'],
+  'the meal-item delete RPC exists'
+);
+select has_function(
+  'public',
+  'search_food_catalog',
+  array['text', 'integer', 'integer'],
+  'the product-aware catalog search RPC exists'
+);
+select has_function(
+  'public',
+  'create_confirmed_label_food',
+  array['jsonb', 'uuid'],
+  'the reviewed-label confirmation RPC exists'
+);
+select has_function(
+  'public',
+  'reserve_food_label_upload',
+  array['uuid', 'uuid', 'food_label_image_kind'],
+  'the atomic label-upload reservation RPC exists'
+);
+select has_function(
+  'public',
+  'reserve_plan_generation',
+  array['uuid', 'text', 'text', 'text', 'text'],
+  'the atomic plan-generation reservation RPC exists'
 );
 select has_function(
   'public',

@@ -21,12 +21,20 @@ import {
   type ProviderFood,
 } from "@/src/lib/ai/provider";
 import { PLAN_PROMPT_VERSION } from "@/src/lib/ai/prompt";
+import { decidePlanGenerationReplay } from "@/src/lib/domain/idempotency";
 
 export const runtime = "nodejs";
 
 const schema = z.object({
   idempotencyKey: z.string().trim().regex(/^[A-Za-z0-9._:-]{8,128}$/),
 });
+
+type PlanGenerationReservation = {
+  result_state: "reserved" | "replayed" | "rate_limited";
+  request_id: string | null;
+  request_status: "pending" | "processing" | "succeeded" | "failed" | null;
+  plan_id: string | null;
+};
 
 function json(value: unknown): Json {
   return JSON.parse(JSON.stringify(value)) as Json;
@@ -106,48 +114,90 @@ export async function POST(request: Request) {
     );
   }
 
-  const { data: existing } = await supabase
-    .from("ai_generation_requests")
-    .select("id,status,plan_id")
-    .eq("user_id", user.id)
-    .eq("idempotency_key", parsed.data.idempotencyKey)
-    .maybeSingle();
-  if (existing) {
-    return apiSuccess({
-      requestId: existing.id,
-      planId: existing.plan_id,
-      status: existing.status,
-      replayed: true,
-    });
-  }
-
-  const tenMinutesAgo = new Date(Date.now() - 10 * 60_000).toISOString();
-  const { count } = await supabase
-    .from("ai_generation_requests")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", user.id)
-    .gte("created_at", tenMinutesAgo);
-  if ((count ?? 0) >= 3) {
-    return apiError("PLAN_RATE_LIMITED", "Wait a few minutes before generating another plan.", 429);
-  }
-
   const mode = providerMode === "openai" ? "openai" : "mock";
   const provider = createPlanProvider(mode);
-  const { data: generationRequest, error: requestError } = await admin
-    .from("ai_generation_requests")
-    .insert({
-      user_id: user.id,
-      idempotency_key: parsed.data.idempotencyKey,
-      status: "processing",
-      provider: provider.mode,
-      model: provider.model,
-      prompt_version: PLAN_PROMPT_VERSION,
-    })
-    .select("id")
-    .single();
-  if (requestError || !generationRequest) {
-    return apiError("PLAN_REQUEST_CONFLICT", "This plan request is already being processed.", 409);
+  const reserveGeneration = admin.rpc as unknown as (
+    name: string,
+    args: Record<string, unknown>,
+  ) => Promise<{
+    data: PlanGenerationReservation[] | null;
+    error: { code?: string } | null;
+  }>;
+  const { data: reservationRows, error: reservationError } =
+    await reserveGeneration("reserve_plan_generation", {
+      target_user_id: user.id,
+      request_idempotency_key: parsed.data.idempotencyKey,
+      request_provider: provider.mode,
+      request_model: provider.model,
+      request_prompt_version: PLAN_PROMPT_VERSION,
+    });
+  const reservation = reservationRows?.[0];
+  if (reservationError || !reservation) {
+    return apiError(
+      "PLAN_REQUEST_RESERVATION_FAILED",
+      "The plan request could not be reserved. Try again.",
+      503,
+    );
   }
+  if (reservation.result_state === "rate_limited") {
+    return apiError(
+      "PLAN_RATE_LIMITED",
+      "Wait a few minutes before generating another plan.",
+      429,
+    );
+  }
+  if (reservation.result_state === "replayed") {
+    if (!reservation.request_id || !reservation.request_status) {
+      return apiError(
+        "PLAN_REQUEST_INVALID_STATE",
+        "The saved plan request is incomplete. Start a new generation request.",
+        500,
+      );
+    }
+    const replay = decidePlanGenerationReplay({
+      status: reservation.request_status,
+      planId: reservation.plan_id,
+    });
+    if (replay.action === "return_plan") {
+      return apiSuccess({
+        requestId: reservation.request_id,
+        planId: replay.planId,
+        status: "succeeded",
+        replayed: true,
+      });
+    }
+    if (replay.action === "wait") {
+      return apiSuccess(
+        {
+          requestId: reservation.request_id,
+          planId: null,
+          status: reservation.request_status,
+          replayed: true,
+        },
+        202,
+      );
+    }
+    if (replay.action === "retry_with_new_key") {
+      return apiError(
+        "PLAN_REQUEST_FAILED",
+        "That plan request did not finish. Start a new generation request.",
+        409,
+      );
+    }
+    return apiError(
+      "PLAN_REQUEST_INVALID_STATE",
+      "The completed plan request has no saved plan. Start a new generation request.",
+      500,
+    );
+  }
+  if (!reservation.request_id) {
+    return apiError(
+      "PLAN_REQUEST_INVALID_STATE",
+      "The plan request was not initialized. Try again.",
+      500,
+    );
+  }
+  const generationRequest = { id: reservation.request_id };
 
   try {
     const [
@@ -180,12 +230,30 @@ export async function POST(request: Request) {
 
     const foodIds = [...new Set((preferencesResult.data ?? []).map((item) => item.food_id))];
     if (foodIds.length < 3) throw new Error("insufficient_eligible_foods");
+    const eligibilityRpc = supabase.rpc as unknown as (
+      name: string,
+      args: Record<string, unknown>,
+    ) => Promise<{
+      data: Array<{ food_id: string }> | null;
+      error: { code?: string } | null;
+    }>;
+    const eligibleResult = await eligibilityRpc("plan_eligible_food_ids", {
+      candidate_food_ids: foodIds,
+    });
+    if (eligibleResult.error) throw new Error("catalog_load_failed");
+    const centrallyEligibleIds = new Set(
+      (eligibleResult.data ?? []).map((row) => row.food_id),
+    );
+    if (centrallyEligibleIds.size < 3) {
+      throw new Error("insufficient_eligible_foods");
+    }
     const foodsResult = await supabase
       .from("foods")
       .select(`
         id,
         slug,
         english_name,
+        ownership_type,
         verification_status,
         food_nutrition (
           calories,
@@ -215,7 +283,7 @@ export async function POST(request: Request) {
           )
         )
       `)
-      .in("id", foodIds);
+      .in("id", [...centrallyEligibleIds]);
     if (foodsResult.error) throw new Error("catalog_load_failed");
 
     const enrichedFoods = (foodsResult.data ?? []).map((food) => ({
@@ -235,7 +303,22 @@ export async function POST(request: Request) {
     const allowedFoodIds = new Set(eligibility.allowed.map((food) => food.id));
     const allowedFoods: ProviderFood[] = eligibility.allowed.flatMap((food) => {
       const bases = food.food_nutrition
-        .filter((record) => record.reference_unit === "g")
+        .filter(
+          (record) =>
+            record.reference_unit === "g" &&
+            record.calories !== null &&
+            record.protein_g !== null &&
+            record.carbohydrate_g !== null &&
+            record.fat_g !== null &&
+            (
+              (food.ownership_type === "catalog" &&
+                food.verification_status === "verified" &&
+                record.verification_status === "verified") ||
+              (food.ownership_type === "private" &&
+                food.verification_status === "user_label" &&
+                record.verification_status === "user_label")
+            ),
+        )
         .map((record) => record.measurement_basis);
       const uniqueBases = [...new Set(bases)];
       return uniqueBases.length
@@ -277,7 +360,7 @@ export async function POST(request: Request) {
     });
 
     const input: PlanProviderInput = {
-      safetyIdentifier: createHash("sha256").update(`cutting-plan:${user.id}`).digest("hex"),
+      safetyIdentifier: createHash("sha256").update(`lets-go-green:${user.id}`).digest("hex"),
       profile: {
         age: profile.age ?? 18,
         gender: profile.gender,

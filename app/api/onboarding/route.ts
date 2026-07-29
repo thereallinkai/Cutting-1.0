@@ -6,6 +6,7 @@ import { isDevelopmentDemo } from "@/src/lib/env";
 import {
   normalizeMealFoodSlugs,
   parseOptionalHeight,
+  parseWeightKg,
 } from "@/src/lib/onboarding-input";
 import { createSupabaseServerClient } from "@/src/lib/supabase/server";
 
@@ -66,8 +67,6 @@ const completionSchema = draftSchema.extend({
       && trainingDays >= 0
       && trainingDays <= 7;
   }),
-  currentWeightKg: z.number().min(20).max(500),
-  targetWeightKg: z.number().min(20).max(500),
   completed: z.literal(true),
 });
 
@@ -154,6 +153,28 @@ export async function PUT(request: Request) {
       422,
     );
   }
+  const currentWeight = parseWeightKg(
+    parsed.data.currentWeight,
+    parsed.data.unit,
+  );
+  if (!currentWeight.ok) {
+    return apiError(
+      "INVALID_CURRENT_WEIGHT",
+      "Enter a current weight from 20 to 500 kg, or the equivalent in pounds.",
+      422,
+    );
+  }
+  const targetWeight = parseWeightKg(
+    parsed.data.targetWeight,
+    parsed.data.unit,
+  );
+  if (!targetWeight.ok) {
+    return apiError(
+      "INVALID_TARGET_WEIGHT",
+      "Enter a target weight from 20 to 500 kg, or the equivalent in pounds.",
+      422,
+    );
+  }
   if (isDevelopmentDemo()) return apiSuccess({ completed: true, goalId: "demo-goal" });
 
   try {
@@ -178,10 +199,29 @@ export async function PUT(request: Request) {
     const { data: catalog, error: foodError } = await supabase
       .from("foods")
       .select("id,slug")
-      .in("slug", allSlugs)
-      .eq("ownership_type", "catalog");
+      .in("slug", allSlugs);
     if (foodError || (catalog?.length ?? 0) !== allSlugs.length) {
       return apiError("FOOD_SELECTION_CHANGED", "One or more selected foods are no longer available.", 409);
+    }
+    const planEligibility = supabase.rpc as unknown as (
+      name: string,
+      args: Record<string, unknown>,
+    ) => Promise<{
+      data: Array<{ food_id: string }> | null;
+      error: { code?: string } | null;
+    }>;
+    const eligibilityResult = await planEligibility("plan_eligible_food_ids", {
+      candidate_food_ids: catalog!.map((food) => food.id),
+    });
+    if (
+      eligibilityResult.error ||
+      (eligibilityResult.data?.length ?? 0) !== catalog!.length
+    ) {
+      return apiError(
+        "FOOD_NOT_PLAN_ELIGIBLE",
+        "One or more foods are still pending source or safety review. Choose reviewed foods or confirm your own package label.",
+        409,
+      );
     }
     const foodIds = new Map(catalog!.map((food) => [food.slug, food.id]));
     const preferences = (["breakfast", "lunch", "dinner"] as const).flatMap((mealType) =>
@@ -251,8 +291,8 @@ export async function PUT(request: Request) {
       profile_safety_context: parsed.data.safety.join("; ") || null,
       profile_notes: parsed.data.notes || null,
       selected_goal_type: goalMap[parsed.data.goalType],
-      current_weight_kg: parsed.data.currentWeightKg,
-      target_weight_kg: parsed.data.targetWeightKg,
+      current_weight_kg: currentWeight.weightKg,
+      target_weight_kg: targetWeight.weightKg,
       plan_start_date: planStartDate,
       target_date: parsed.data.targetDate,
       preferences: toJson(preferences),

@@ -4,7 +4,7 @@
 begin;
 
 select pg_advisory_xact_lock(
-  hashtextextended('cutting-plan-catalog-seed-v1', 0)
+  hashtextextended('lets-go-green-catalog-seed-v1', 0)
 );
 
 insert into public.food_categories (id, slug, english_label)
@@ -876,5 +876,225 @@ set
   source_version = excluded.source_version,
   verified_at = excluded.verified_at,
   updated_at = now();
+
+-- Migrations run before this seed on a fresh Supabase bootstrap. Reconcile the
+-- provenance and safety rows added by later schema versions after the catalog
+-- foods and nutrition now exist.
+insert into public.food_safety_metadata (
+  food_id,
+  allergen_data_status,
+  restriction_data_status
+)
+select
+  food.id,
+  case
+    when food.verification_status = 'verified'
+    then 'reviewed'::public.food_safety_data_status
+    else 'unknown'::public.food_safety_data_status
+  end,
+  case
+    when food.verification_status = 'verified'
+    then 'reviewed'::public.food_safety_data_status
+    else 'unknown'::public.food_safety_data_status
+  end
+from public.foods food
+where food.ownership_type = 'catalog'
+  and food.id::text like '10000000-0000-4000-8000-%'
+on conflict (food_id) do update
+set
+  allergen_data_status = excluded.allergen_data_status,
+  restriction_data_status = excluded.restriction_data_status,
+  updated_at = now();
+
+insert into public.food_sources (
+  food_id,
+  provider,
+  external_id,
+  source_url,
+  source_version,
+  license_code,
+  attribution_text,
+  retrieved_at
+)
+select
+  food.id,
+  case
+    when nutrition.source_name = 'USDA FoodData Central'
+    then 'usda_fdc'::public.food_source_provider
+    else 'manual_review'::public.food_source_provider
+  end,
+  case
+    when nutrition.source_name = 'USDA FoodData Central'
+    then coalesce(
+      substring(nutrition.source_reference from 'FDC ID ([0-9]+)'),
+      'seed:' || food.slug
+    )
+    else 'seed:' || food.slug
+  end,
+  case
+    when nutrition.source_name = 'USDA FoodData Central'
+      and substring(nutrition.source_reference from 'FDC ID ([0-9]+)') is not null
+    then 'https://fdc.nal.usda.gov/fdc-app.html#/food-details/'
+      || substring(nutrition.source_reference from 'FDC ID ([0-9]+)')
+      || '/nutrients'
+    else null
+  end,
+  nutrition.source_version,
+  case
+    when nutrition.source_name = 'USDA FoodData Central' then 'CC0-1.0'
+    else null
+  end,
+  case
+    when nutrition.source_name = 'USDA FoodData Central'
+    then 'U.S. Department of Agriculture, Agricultural Research Service, FoodData Central.'
+    else nutrition.source_name
+  end,
+  coalesce(nutrition.verified_at::timestamptz, nutrition.created_at)
+from public.foods food
+join public.food_nutrition nutrition on nutrition.food_id = food.id
+where food.ownership_type = 'catalog'
+  and food.id::text like '10000000-0000-4000-8000-%'
+  and nutrition.id::text like '20000000-0000-4000-8000-%'
+on conflict (provider, external_id) do update
+set
+  food_id = excluded.food_id,
+  source_url = excluded.source_url,
+  source_version = excluded.source_version,
+  license_code = excluded.license_code,
+  attribution_text = excluded.attribution_text,
+  retrieved_at = excluded.retrieved_at,
+  updated_at = now();
+
+update public.food_nutrition nutrition
+set
+  source_id = source.id,
+  updated_at = now()
+from public.food_sources source,
+  public.foods food
+where source.food_id = nutrition.food_id
+  and food.id = nutrition.food_id
+  and food.ownership_type = 'catalog'
+  and food.id::text like '10000000-0000-4000-8000-%'
+  and nutrition.id::text like '20000000-0000-4000-8000-%'
+  and source.provider = case
+    when nutrition.source_name = 'USDA FoodData Central'
+    then 'usda_fdc'::public.food_source_provider
+    else 'manual_review'::public.food_source_provider
+  end
+  and source.external_id = case
+    when nutrition.source_name = 'USDA FoodData Central'
+    then coalesce(
+      substring(nutrition.source_reference from 'FDC ID ([0-9]+)'),
+      'seed:' || food.slug
+    )
+    else 'seed:' || food.slug
+  end;
+
+update public.food_safety_metadata safety
+set
+  source_id = nutrition.source_id,
+  updated_at = now()
+from public.food_nutrition nutrition
+where nutrition.food_id = safety.food_id
+  and nutrition.source_id is not null
+  and safety.food_id::text like '10000000-0000-4000-8000-%'
+  and nutrition.id::text like '20000000-0000-4000-8000-%';
+
+-- Preserve the richer nutrient panels published for the five deterministic
+-- raw-vegetable SR Legacy records. Values are per 100 g from the exact FDC IDs
+-- already named on their food_nutrition rows; missing values are not inferred.
+create temporary table lets_go_green_seed_vegetable_nutrition (
+  nutrition_id uuid primary key,
+  energy_kj numeric,
+  saturated_fat_g numeric,
+  trans_fat_g numeric,
+  total_sugars_g numeric,
+  cholesterol_mg numeric,
+  potassium_mg numeric,
+  calcium_mg numeric,
+  iron_mg numeric,
+  vitamin_d_mcg numeric,
+  additional_nutrients jsonb not null
+) on commit drop;
+
+insert into lets_go_green_seed_vegetable_nutrition
+values
+  (
+    '20000000-0000-4000-8000-000000000016',
+    141, 0.114, 0, 1.7, 0, 316, 47, 0.73, 0,
+    '[{"code":"usda-255","name":"Water","amount":89.3,"unit":"g"},{"code":"usda-304","name":"Magnesium, Mg","amount":21,"unit":"mg"},{"code":"usda-305","name":"Phosphorus, P","amount":66,"unit":"mg"},{"code":"usda-309","name":"Zinc, Zn","amount":0.41,"unit":"mg"},{"code":"usda-312","name":"Copper, Cu","amount":0.049,"unit":"mg"},{"code":"usda-315","name":"Manganese, Mn","amount":0.21,"unit":"mg"},{"code":"usda-317","name":"Selenium, Se","amount":2.5,"unit":"mcg"},{"code":"usda-401","name":"Vitamin C, total ascorbic acid","amount":89.2,"unit":"mg"},{"code":"usda-404","name":"Thiamin","amount":0.071,"unit":"mg"},{"code":"usda-405","name":"Riboflavin","amount":0.117,"unit":"mg"},{"code":"usda-406","name":"Niacin","amount":0.639,"unit":"mg"},{"code":"usda-415","name":"Vitamin B-6","amount":0.175,"unit":"mg"},{"code":"usda-417","name":"Folate, total","amount":63,"unit":"mcg"},{"code":"usda-421","name":"Choline, total","amount":18.7,"unit":"mg"},{"code":"usda-320","name":"Vitamin A, RAE","amount":31,"unit":"mcg"},{"code":"usda-323","name":"Vitamin E (alpha-tocopherol)","amount":0.78,"unit":"mg"},{"code":"usda-430","name":"Vitamin K (phylloquinone)","amount":101.6,"unit":"mcg"},{"code":"usda-645","name":"Fatty acids, total monounsaturated","amount":0.031,"unit":"g"},{"code":"usda-646","name":"Fatty acids, total polyunsaturated","amount":0.112,"unit":"g"}]'::jsonb
+  ),
+  (
+    '20000000-0000-4000-8000-000000000017',
+    97, 0.063, 0, 0.42, 0, 558, 99, 2.71, 0,
+    '[{"code":"usda-255","name":"Water","amount":91.4,"unit":"g"},{"code":"usda-304","name":"Magnesium, Mg","amount":79,"unit":"mg"},{"code":"usda-305","name":"Phosphorus, P","amount":49,"unit":"mg"},{"code":"usda-309","name":"Zinc, Zn","amount":0.53,"unit":"mg"},{"code":"usda-312","name":"Copper, Cu","amount":0.13,"unit":"mg"},{"code":"usda-315","name":"Manganese, Mn","amount":0.897,"unit":"mg"},{"code":"usda-317","name":"Selenium, Se","amount":1,"unit":"mcg"},{"code":"usda-401","name":"Vitamin C, total ascorbic acid","amount":28.1,"unit":"mg"},{"code":"usda-404","name":"Thiamin","amount":0.078,"unit":"mg"},{"code":"usda-405","name":"Riboflavin","amount":0.189,"unit":"mg"},{"code":"usda-406","name":"Niacin","amount":0.724,"unit":"mg"},{"code":"usda-415","name":"Vitamin B-6","amount":0.195,"unit":"mg"},{"code":"usda-417","name":"Folate, total","amount":194,"unit":"mcg"},{"code":"usda-421","name":"Choline, total","amount":19.3,"unit":"mg"},{"code":"usda-320","name":"Vitamin A, RAE","amount":469,"unit":"mcg"},{"code":"usda-323","name":"Vitamin E (alpha-tocopherol)","amount":2.03,"unit":"mg"},{"code":"usda-430","name":"Vitamin K (phylloquinone)","amount":482.9,"unit":"mcg"},{"code":"usda-645","name":"Fatty acids, total monounsaturated","amount":0.01,"unit":"g"},{"code":"usda-646","name":"Fatty acids, total polyunsaturated","amount":0.165,"unit":"g"}]'::jsonb
+  ),
+  (
+    '20000000-0000-4000-8000-000000000019',
+    72, 0.039, 0, 1.19, 0, 247, 33, 0.97, 0,
+    '[{"code":"usda-255","name":"Water","amount":94.61,"unit":"g"},{"code":"usda-304","name":"Magnesium, Mg","amount":14,"unit":"mg"},{"code":"usda-305","name":"Phosphorus, P","amount":30,"unit":"mg"},{"code":"usda-309","name":"Zinc, Zn","amount":0.23,"unit":"mg"},{"code":"usda-312","name":"Copper, Cu","amount":0.048,"unit":"mg"},{"code":"usda-315","name":"Manganese, Mn","amount":0.155,"unit":"mg"},{"code":"usda-317","name":"Selenium, Se","amount":0.4,"unit":"mcg"},{"code":"usda-401","name":"Vitamin C, total ascorbic acid","amount":4,"unit":"mg"},{"code":"usda-404","name":"Thiamin","amount":0.072,"unit":"mg"},{"code":"usda-405","name":"Riboflavin","amount":0.067,"unit":"mg"},{"code":"usda-406","name":"Niacin","amount":0.313,"unit":"mg"},{"code":"usda-415","name":"Vitamin B-6","amount":0.074,"unit":"mg"},{"code":"usda-417","name":"Folate, total","amount":136,"unit":"mcg"},{"code":"usda-421","name":"Choline, total","amount":9.9,"unit":"mg"},{"code":"usda-320","name":"Vitamin A, RAE","amount":436,"unit":"mcg"},{"code":"usda-323","name":"Vitamin E (alpha-tocopherol)","amount":0.13,"unit":"mg"},{"code":"usda-430","name":"Vitamin K (phylloquinone)","amount":102.5,"unit":"mcg"},{"code":"usda-645","name":"Fatty acids, total monounsaturated","amount":0.012,"unit":"g"},{"code":"usda-646","name":"Fatty acids, total polyunsaturated","amount":0.16,"unit":"g"}]'::jsonb
+  ),
+  (
+    '20000000-0000-4000-8000-000000000020',
+    173, 0.032, 0, 4.74, 0, 320, 33, 0.3, 0,
+    '[{"code":"usda-255","name":"Water","amount":88.29,"unit":"g"},{"code":"usda-304","name":"Magnesium, Mg","amount":12,"unit":"mg"},{"code":"usda-305","name":"Phosphorus, P","amount":35,"unit":"mg"},{"code":"usda-309","name":"Zinc, Zn","amount":0.24,"unit":"mg"},{"code":"usda-312","name":"Copper, Cu","amount":0.045,"unit":"mg"},{"code":"usda-315","name":"Manganese, Mn","amount":0.143,"unit":"mg"},{"code":"usda-317","name":"Selenium, Se","amount":0.1,"unit":"mcg"},{"code":"usda-401","name":"Vitamin C, total ascorbic acid","amount":5.9,"unit":"mg"},{"code":"usda-404","name":"Thiamin","amount":0.066,"unit":"mg"},{"code":"usda-405","name":"Riboflavin","amount":0.058,"unit":"mg"},{"code":"usda-406","name":"Niacin","amount":0.983,"unit":"mg"},{"code":"usda-415","name":"Vitamin B-6","amount":0.138,"unit":"mg"},{"code":"usda-417","name":"Folate, total","amount":19,"unit":"mcg"},{"code":"usda-421","name":"Choline, total","amount":8.8,"unit":"mg"},{"code":"usda-320","name":"Vitamin A, RAE","amount":835,"unit":"mcg"},{"code":"usda-323","name":"Vitamin E (alpha-tocopherol)","amount":0.66,"unit":"mg"},{"code":"usda-430","name":"Vitamin K (phylloquinone)","amount":13.2,"unit":"mcg"},{"code":"usda-645","name":"Fatty acids, total monounsaturated","amount":0.012,"unit":"g"},{"code":"usda-646","name":"Fatty acids, total polyunsaturated","amount":0.102,"unit":"g"}]'::jsonb
+  ),
+  (
+    '20000000-0000-4000-8000-000000000021',
+    74, 0.028, 0, 2.63, 0, 237, 10, 0.27, 0,
+    '[{"code":"usda-255","name":"Water","amount":94.52,"unit":"g"},{"code":"usda-304","name":"Magnesium, Mg","amount":11,"unit":"mg"},{"code":"usda-305","name":"Phosphorus, P","amount":24,"unit":"mg"},{"code":"usda-309","name":"Zinc, Zn","amount":0.17,"unit":"mg"},{"code":"usda-312","name":"Copper, Cu","amount":0.059,"unit":"mg"},{"code":"usda-315","name":"Manganese, Mn","amount":0.114,"unit":"mg"},{"code":"usda-317","name":"Selenium, Se","amount":0,"unit":"mcg"},{"code":"usda-401","name":"Vitamin C, total ascorbic acid","amount":13.7,"unit":"mg"},{"code":"usda-404","name":"Thiamin","amount":0.037,"unit":"mg"},{"code":"usda-405","name":"Riboflavin","amount":0.019,"unit":"mg"},{"code":"usda-406","name":"Niacin","amount":0.594,"unit":"mg"},{"code":"usda-415","name":"Vitamin B-6","amount":0.08,"unit":"mg"},{"code":"usda-417","name":"Folate, total","amount":15,"unit":"mcg"},{"code":"usda-421","name":"Choline, total","amount":6.7,"unit":"mg"},{"code":"usda-320","name":"Vitamin A, RAE","amount":42,"unit":"mcg"},{"code":"usda-323","name":"Vitamin E (alpha-tocopherol)","amount":0.54,"unit":"mg"},{"code":"usda-430","name":"Vitamin K (phylloquinone)","amount":7.9,"unit":"mcg"},{"code":"usda-645","name":"Fatty acids, total monounsaturated","amount":0.031,"unit":"g"},{"code":"usda-646","name":"Fatty acids, total polyunsaturated","amount":0.083,"unit":"g"}]'::jsonb
+  );
+
+update public.food_nutrition nutrition
+set
+  energy_kj = seed.energy_kj,
+  saturated_fat_g = seed.saturated_fat_g,
+  trans_fat_g = seed.trans_fat_g,
+  total_sugars_g = seed.total_sugars_g,
+  cholesterol_mg = seed.cholesterol_mg,
+  potassium_mg = seed.potassium_mg,
+  calcium_mg = seed.calcium_mg,
+  iron_mg = seed.iron_mg,
+  vitamin_d_mcg = seed.vitamin_d_mcg,
+  updated_at = now()
+from lets_go_green_seed_vegetable_nutrition seed
+where nutrition.id = seed.nutrition_id;
+
+delete from public.food_nutrient_amounts amount
+using lets_go_green_seed_vegetable_nutrition seed
+where amount.nutrition_id = seed.nutrition_id
+  and amount.nutrient_code like 'usda-%';
+
+insert into public.food_nutrient_amounts (
+  nutrition_id,
+  nutrient_code,
+  display_name,
+  amount,
+  unit,
+  display_order
+)
+select
+  seed.nutrition_id,
+  nutrient.code,
+  nutrient.name,
+  nutrient.amount,
+  nutrient.unit,
+  nutrient_entry.ordinality::integer - 1
+from lets_go_green_seed_vegetable_nutrition seed
+cross join lateral jsonb_array_elements(seed.additional_nutrients)
+  with ordinality as nutrient_entry(value, ordinality)
+cross join lateral jsonb_to_record(nutrient_entry.value) as nutrient(
+    code text,
+    name text,
+    amount numeric,
+    unit text
+  )
+on conflict (nutrition_id, nutrient_code) do update
+set
+  display_name = excluded.display_name,
+  amount = excluded.amount,
+  unit = excluded.unit,
+  daily_value_percent = excluded.daily_value_percent,
+  display_order = excluded.display_order;
 
 commit;

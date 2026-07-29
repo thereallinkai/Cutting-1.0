@@ -5,7 +5,7 @@ import { createSupabaseServerClient } from "@/src/lib/supabase/server";
 
 const noStoreHeaders = {
   "Cache-Control": "private, no-store, max-age=0",
-  "Content-Disposition": 'attachment; filename="cutting-plan-demo-data.json"',
+  "Content-Disposition": 'attachment; filename="lets-go-green-demo-data.json"',
   "Content-Type": "application/json; charset=utf-8",
   "X-Content-Type-Options": "nosniff",
 };
@@ -25,13 +25,13 @@ export async function GET() {
   if (isDevelopmentDemo()) {
     return downloadResponse(
       {
-        formatVersion: 1,
+        formatVersion: 3,
         generatedAt,
         demo: true,
         notice:
           "Supabase is not configured. This file contains sample data only and is not an account export.",
         account: {
-          email: "demo@cuttingplan.local",
+          email: "demo@letsgogreen.local",
         },
         profile: {
           full_name: "Jamie Rivera",
@@ -47,7 +47,7 @@ export async function GET() {
           goal_type: "fat_loss",
         },
       },
-      "cutting-plan-demo-data.json",
+      "lets-go-green-demo-data.json",
     );
   }
 
@@ -74,7 +74,11 @@ export async function GET() {
       warningsResult,
       plansResult,
       checkinsResult,
+      mealCheckinsResult,
+      mealItemsResult,
       aiRequestsResult,
+      labelSubmissionsResult,
+      labelImagesResult,
     ] = await Promise.all([
       supabase.from("profiles").select("*").eq("user_id", userId).maybeSingle(),
       supabase
@@ -127,8 +131,31 @@ export async function GET() {
         .eq("user_id", userId)
         .order("local_date"),
       supabase
+        .from("daily_meal_checkins")
+        .select("*")
+        .eq("user_id", userId)
+        .order("local_date")
+        .order("meal_type"),
+      supabase
+        .from("daily_meal_items")
+        .select("*,food:foods(id,slug,english_name,verification_status)")
+        .eq("user_id", userId)
+        .order("created_at"),
+      supabase
         .from("ai_generation_requests")
         .select("*")
+        .eq("user_id", userId)
+        .order("created_at"),
+      supabase
+        .from("food_label_submissions")
+        .select("*")
+        .eq("user_id", userId)
+        .order("created_at"),
+      supabase
+        .from("food_label_images")
+        .select(
+          "id,submission_id,user_id,image_kind,mime_type,byte_size,pixel_width,pixel_height,sha256,created_at",
+        )
         .eq("user_id", userId)
         .order("created_at"),
     ]);
@@ -144,7 +171,11 @@ export async function GET() {
       warningsResult,
       plansResult,
       checkinsResult,
+      mealCheckinsResult,
+      mealItemsResult,
       aiRequestsResult,
+      labelSubmissionsResult,
+      labelImagesResult,
     ];
     if (topLevelResults.some((result) => result.error)) {
       return apiError(
@@ -164,6 +195,9 @@ export async function GET() {
       foodCategoriesResult,
       foodAllergensResult,
       foodRestrictionsResult,
+      foodProductsResult,
+      foodSourcesResult,
+      foodSafetyResult,
       planDaysResult,
     ] = await Promise.all([
       privateFoodIds.length
@@ -190,6 +224,25 @@ export async function GET() {
             .select("*,restriction:dietary_restriction_types(*)")
             .in("food_id", privateFoodIds)
         : Promise.resolve({ data: [], error: null }),
+      privateFoodIds.length
+        ? supabase
+            .from("food_products")
+            .select("*")
+            .in("food_id", privateFoodIds)
+        : Promise.resolve({ data: [], error: null }),
+      privateFoodIds.length
+        ? supabase
+            .from("food_sources")
+            .select("*")
+            .in("food_id", privateFoodIds)
+            .order("retrieved_at")
+        : Promise.resolve({ data: [], error: null }),
+      privateFoodIds.length
+        ? supabase
+            .from("food_safety_metadata")
+            .select("*")
+            .in("food_id", privateFoodIds)
+        : Promise.resolve({ data: [], error: null }),
       planIds.length
         ? supabase
             .from("plan_days")
@@ -198,6 +251,17 @@ export async function GET() {
             .order("day_index")
         : Promise.resolve({ data: [], error: null }),
     ]);
+
+    const nutritionIds = (foodNutritionResult.data ?? []).map(
+      (nutrition) => nutrition.id,
+    );
+    const foodNutrientAmountsResult = nutritionIds.length
+      ? await supabase
+          .from("food_nutrient_amounts")
+          .select("*")
+          .in("nutrition_id", nutritionIds)
+          .order("display_order")
+      : { data: [], error: null };
 
     const planDayIds = (planDaysResult.data ?? []).map((day) => day.id);
     const planMealsResult = planDayIds.length
@@ -223,6 +287,10 @@ export async function GET() {
       foodCategoriesResult,
       foodAllergensResult,
       foodRestrictionsResult,
+      foodProductsResult,
+      foodSourcesResult,
+      foodSafetyResult,
+      foodNutrientAmountsResult,
       planDaysResult,
       planMealsResult,
       planItemsResult,
@@ -238,7 +306,7 @@ export async function GET() {
     const localDate = generatedAt.slice(0, 10);
     return downloadResponse(
       {
-        formatVersion: 1,
+        formatVersion: 3,
         generatedAt,
         demo: false,
         account: {
@@ -257,9 +325,19 @@ export async function GET() {
         privateFoods: {
           foods: privateFoodsResult.data ?? [],
           nutrition: foodNutritionResult.data ?? [],
+          nutrientAmounts: foodNutrientAmountsResult.data ?? [],
+          products: foodProductsResult.data ?? [],
+          sources: foodSourcesResult.data ?? [],
+          safetyMetadata: foodSafetyResult.data ?? [],
           categories: foodCategoriesResult.data ?? [],
           allergens: foodAllergensResult.data ?? [],
           dietaryRestrictions: foodRestrictionsResult.data ?? [],
+        },
+        foodLabelSubmissions: {
+          submissions: labelSubmissionsResult.data ?? [],
+          imageMetadata: labelImagesResult.data ?? [],
+          notice:
+            "Image metadata is included, but raw private label-photo bytes and download URLs are not embedded in this JSON export.",
         },
         plans: {
           versions: plansResult.data ?? [],
@@ -269,8 +347,10 @@ export async function GET() {
           generationRequests: aiRequestsResult.data ?? [],
         },
         dailyCheckins: checkinsResult.data ?? [],
+        dailyMealCheckins: mealCheckinsResult.data ?? [],
+        dailyMealItems: mealItemsResult.data ?? [],
       },
-      `cutting-plan-data-${localDate}.json`,
+      `lets-go-green-data-${localDate}.json`,
     );
   } catch {
     return apiError(

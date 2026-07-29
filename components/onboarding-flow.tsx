@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import {
   DndContext,
   KeyboardSensor,
@@ -28,8 +27,6 @@ import {
   ChevronDown,
   ChevronUp,
   GripVertical,
-  Leaf,
-  Search,
   ShieldCheck,
   X,
 } from "lucide-react";
@@ -38,6 +35,16 @@ import {
   normalizeMealFoodSlugs,
   parseOptionalHeight,
 } from "@/src/lib/onboarding-input";
+import { BrandLink } from "@/components/brand-link";
+import { BRAND } from "@/src/lib/brand";
+import {
+  FoodSearchPicker,
+  type FoodPickerItem,
+} from "@/components/food-search-picker";
+import type {
+  FoodNutritionFacts,
+  FoodSourceSummary,
+} from "@/src/lib/domain/food-catalog";
 
 type Meal = "breakfast" | "lunch" | "dinner";
 type Unit = "kg" | "lb";
@@ -52,12 +59,12 @@ type PageError = {
   message: string;
 };
 
-type Food = {
-  id: string;
-  name: string;
-  categories: string[];
-  planEligible: boolean;
-};
+type Food = FoodPickerItem;
+
+const ONBOARDING_DRAFT_KEY = "lets-go-green-onboarding-draft";
+const LEGACY_ONBOARDING_DRAFT_KEY = "cutting-plan-onboarding-draft";
+const REGISTRATION_DRAFT_KEY = "lets-go-green-registration-draft";
+const LEGACY_REGISTRATION_DRAFT_KEY = "cutting-plan-registration-draft";
 
 type Draft = {
   meals: Record<Meal, string[]>;
@@ -109,6 +116,13 @@ type ApiFailure = {
   } | null;
 };
 
+type PlanGenerationResult = ApiFailure & {
+  data?: {
+    planId?: string | null;
+    status?: string;
+  } | null;
+};
+
 function normalizeRestoredDraft(value: unknown): Partial<Draft> {
   if (!value || typeof value !== "object") return {};
   const restored = value as Partial<Draft>;
@@ -140,7 +154,11 @@ function completionFailure(
         "Log in again to finish onboarding. Your information is still saved in this browser.",
     };
   }
-  if (code === "FOOD_SELECTION_CHANGED" || code === "DUPLICATE_MEAL_FOOD") {
+  if (
+    code === "FOOD_SELECTION_CHANGED" ||
+    code === "FOOD_NOT_PLAN_ELIGIBLE" ||
+    code === "DUPLICATE_MEAL_FOOD"
+  ) {
     return {
       field: "mealPreferences",
       heading: "Review your meal selections.",
@@ -154,6 +172,21 @@ function completionFailure(
       message:
         serverMessage
         ?? "Enter a height such as 175 cm or 5 ft 9 in, or leave it blank.",
+    };
+  }
+  if (
+    code === "INVALID_CURRENT_WEIGHT" ||
+    code === "INVALID_TARGET_WEIGHT"
+  ) {
+    return {
+      field:
+        code === "INVALID_CURRENT_WEIGHT"
+          ? "currentWeight"
+          : "targetWeight",
+      heading: "Review your weights.",
+      message:
+        serverMessage
+        ?? "Enter weights from 20 to 500 kg, or the equivalent in pounds.",
     };
   }
   return {
@@ -305,6 +338,7 @@ export function OnboardingFlow({
   const router = useRouter();
   const [step, setStep] = useState(Math.min(6, Math.max(2, initialStep)));
   const [draft, setDraft] = useState<Draft>(initialDraft);
+  const [draftHydrated, setDraftHydrated] = useState(false);
   const [catalogFoods, setCatalogFoods] = useState<Food[]>(fallbackFoods);
   const [verificationEmail, setVerificationEmail] = useState(email);
   const [search, setSearch] = useState("");
@@ -328,9 +362,13 @@ export function OnboardingFlow({
   const draftSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const generationKeyRef = useRef<string | null>(null);
 
-  const loadCatalogFoods = useCallback(async () => {
+  const loadCatalogFoods = useCallback(async (query = "") => {
     try {
-      const response = await fetch("/api/foods");
+      const response = await fetch(
+        query
+          ? `/api/foods?limit=100&q=${encodeURIComponent(query)}`
+          : "/api/foods",
+      );
       if (!response.ok) return false;
       const result = (await response.json()) as {
         data?: Array<{
@@ -338,17 +376,33 @@ export function OnboardingFlow({
           english_name: string;
           categories?: string[];
           plan_eligible: boolean;
+          brand_name?: string | null;
+          variant_name?: string | null;
+          gtin?: string | null;
+          catalog_status?: FoodPickerItem["catalogStatus"];
+          nutrition?: FoodNutritionFacts | null;
+          source?: FoodSourceSummary | null;
         }>;
       };
       if (!result.data?.length) return false;
-      setCatalogFoods(
-        result.data.map((food) => ({
+      const nextFoods = result.data.map((food) => ({
           id: food.slug,
           name: food.english_name,
           categories: food.categories ?? [],
           planEligible: food.plan_eligible,
-        })),
-      );
+          brandName: food.brand_name,
+          variantName: food.variant_name,
+          gtin: food.gtin,
+          catalogStatus: food.catalog_status,
+          nutrition: food.nutrition,
+          source: food.source,
+        }));
+      setCatalogFoods((current) => {
+        if (!query) return nextFoods;
+        const merged = new Map(current.map((food) => [food.id, food]));
+        nextFoods.forEach((food) => merged.set(food.id, food));
+        return [...merged.values()];
+      });
       return true;
     } catch {
       return false;
@@ -386,15 +440,24 @@ export function OnboardingFlow({
           : current,
       );
     }, 0);
-    const saved = window.localStorage.getItem("cutting-plan-onboarding-draft");
+    const currentSaved = window.localStorage.getItem(ONBOARDING_DRAFT_KEY);
+    const legacySaved = window.localStorage.getItem(
+      LEGACY_ONBOARDING_DRAFT_KEY,
+    );
+    const saved = currentSaved ?? legacySaved;
     if (saved) {
       try {
         const restored = normalizeRestoredDraft(JSON.parse(saved));
+        if (!currentSaved && legacySaved) {
+          window.localStorage.setItem(ONBOARDING_DRAFT_KEY, legacySaved);
+          window.localStorage.removeItem(LEGACY_ONBOARDING_DRAFT_KEY);
+        }
         window.setTimeout(() => {
           setDraft((current) => ({ ...current, ...restored }));
         }, 0);
       } catch {
-        window.localStorage.removeItem("cutting-plan-onboarding-draft");
+        window.localStorage.removeItem(ONBOARDING_DRAFT_KEY);
+        window.localStorage.removeItem(LEGACY_ONBOARDING_DRAFT_KEY);
       }
     }
     fetch("/api/onboarding")
@@ -408,7 +471,8 @@ export function OnboardingFlow({
           goToStep(result.data.currentStep);
         }
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => setDraftHydrated(true));
     if (initialStep >= 3) {
       window.setTimeout(() => {
         void loadCatalogFoods();
@@ -417,11 +481,11 @@ export function OnboardingFlow({
   }, [initialStep, loadCatalogFoods]);
 
   useEffect(() => {
-    window.localStorage.setItem("cutting-plan-onboarding-draft", JSON.stringify(draft));
+    window.localStorage.setItem(ONBOARDING_DRAFT_KEY, JSON.stringify(draft));
   }, [draft]);
 
   useEffect(() => {
-    if (step < 3) return;
+    if (step < 3 || !draftHydrated) return;
     draftSaveTimerRef.current = window.setTimeout(() => {
       draftSaveTimerRef.current = null;
       void queueDraftPersistence(step, draft).catch(() => undefined);
@@ -432,7 +496,7 @@ export function OnboardingFlow({
         draftSaveTimerRef.current = null;
       }
     };
-  }, [draft, queueDraftPersistence, step]);
+  }, [draft, draftHydrated, queueDraftPersistence, step]);
 
   useEffect(() => {
     if (step !== 2 || resendSeconds <= 0) return;
@@ -442,10 +506,6 @@ export function OnboardingFlow({
     );
     return () => window.clearTimeout(timer);
   }, [resendSeconds, step]);
-
-  const visibleFoods = catalogFoods.filter((food) =>
-    `${food.name} ${food.categories.join(" ")}`.toLowerCase().includes(search.toLowerCase()),
-  );
 
   const currentKg = useMemo(() => {
     const value = Number(draft.currentWeight);
@@ -698,7 +758,8 @@ export function OnboardingFlow({
       });
       if (!response.ok) throw new Error();
       await loadCatalogFoods();
-      window.localStorage.removeItem("cutting-plan-registration-draft");
+      window.localStorage.removeItem(REGISTRATION_DRAFT_KEY);
+      window.localStorage.removeItem(LEGACY_REGISTRATION_DRAFT_KEY);
       goToStep(3);
       setAnnouncement("Email verified. Food preferences are next.");
     } catch {
@@ -850,8 +911,6 @@ export function OnboardingFlow({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           ...draft,
-          currentWeightKg: currentKg,
-          targetWeightKg: targetKg,
           completed: true,
         }),
       });
@@ -869,7 +928,8 @@ export function OnboardingFlow({
         setCompletionPhase(null);
         return;
       }
-      window.localStorage.removeItem("cutting-plan-onboarding-draft");
+      window.localStorage.removeItem(ONBOARDING_DRAFT_KEY);
+      window.localStorage.removeItem(LEGACY_ONBOARDING_DRAFT_KEY);
       if (!generate) {
         router.push("/today");
         return;
@@ -900,7 +960,59 @@ export function OnboardingFlow({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ idempotencyKey }),
       });
-      if (!generationResponse.ok) throw new Error("generation_failed");
+      const generationResult =
+        typeof generationResponse.json === "function"
+          ? ((await generationResponse.json().catch(() => null)) as
+              | PlanGenerationResult
+              | null)
+          : null;
+      if (!generationResponse.ok) {
+        generationKeyRef.current = null;
+        showPageErrors(
+          [
+            {
+              field: "generation",
+              message:
+                generationResult?.error?.message
+                ?? "Your profile is saved, but a new plan could not be generated. Try again with a new request, or go to Today.",
+            },
+          ],
+          "Your profile is complete.",
+        );
+        return;
+      }
+      if (
+        generationResponse.status === 202 ||
+        generationResult?.data?.status === "pending" ||
+        generationResult?.data?.status === "processing"
+      ) {
+        showPageErrors(
+          [
+            {
+              field: "generation",
+              message:
+                "Your profile is saved and plan generation is still processing. Wait a moment, then choose Generate my plan again to check the same request.",
+            },
+          ],
+          "Your plan is still being generated.",
+        );
+        return;
+      }
+      const planId = generationResult?.data?.planId;
+      if (typeof planId !== "string" || !planId.trim()) {
+        generationKeyRef.current = null;
+        showPageErrors(
+          [
+            {
+              field: "generation",
+              message:
+                "Your profile is saved, but the completed request did not include a plan. Try again with a new request, or go to Today.",
+            },
+          ],
+          "Your profile is complete.",
+        );
+        return;
+      }
       generationKeyRef.current = null;
       router.push("/plan");
     } catch {
@@ -925,9 +1037,7 @@ export function OnboardingFlow({
   return (
     <div className="onboarding-shell">
       <aside className="onboarding-rail">
-        <Link className="brand" href="/">
-          <span className="brand-mark"><Leaf size={19} /></span>Cutting Plan
-        </Link>
+        <BrandLink />
         <ol className="step-list">
           {stepLabels.map((label, index) => {
             const number = index + 1;
@@ -1058,35 +1168,13 @@ export function OnboardingFlow({
               <h1>What works on your plate?</h1>
               <p>Add foods to each meal. Search, buttons, keyboard reordering, and drag-and-drop all lead to the same result.</p>
               <div className="food-picker">
-                <section>
-                  <label className="field">
-                    <span>Search foods</span>
-                    <div className="password-wrap">
-                      <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Try chicken or vegetable…" />
-                      <span className="icon-button" aria-hidden="true"><Search size={17} /></span>
-                    </div>
-                  </label>
-                  <div className="food-results" aria-label="Food search results" style={{ marginTop: ".8rem" }}>
-                    {visibleFoods.map((food) => (
-                      <article className="food-result" key={food.id}>
-                        <div>
-                          <h3>{food.name}</h3>
-                          <div className="category-list">{food.categories.map((category) => <span className="category-badge" key={category}>{category}</span>)}</div>
-                          {!food.planEligible ? (
-                            <p className="field-help">
-                              Saved label food — not yet eligible for generated plans.
-                            </p>
-                          ) : null}
-                        </div>
-                        <div className="food-actions">
-                          {(["breakfast", "lunch", "dinner"] as Meal[]).map((meal) => (
-                            <button disabled={!food.planEligible} type="button" onClick={() => addFood(meal, food)} key={meal} aria-label={`Add ${food.name} to ${meal}`}>Add to {meal[0].toUpperCase() + meal.slice(1)}</button>
-                          ))}
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                </section>
+                <FoodSearchPicker
+                  foods={catalogFoods}
+                  search={search}
+                  onSearchChange={setSearch}
+                  onAdd={addFood}
+                  onCatalogChanged={loadCatalogFoods}
+                />
                 <div className="meal-destinations">
                   {(["breakfast", "lunch", "dinner"] as Meal[]).map((meal) => (
                     <MealDestination key={meal} meal={meal} ids={draft.meals[meal]} foods={catalogFoods} missingCategories={missingCategories(meal)} onChange={(ids) => setMeal(meal, ids)} announce={setAnnouncement} />
@@ -1151,7 +1239,33 @@ export function OnboardingFlow({
                 </label>
                 <label className="field"><span>Activity level</span><select aria-invalid={hasPageError("activity") || undefined} value={draft.activity} onChange={(event) => update("activity", event.target.value)}><option value="low">Mostly seated</option><option value="light">Lightly active</option><option value="moderate">Moderately active</option><option value="high">Highly active</option></select></label>
                 <label className="field"><span>Strength training days / week</span><input type="number" min="0" max="7" aria-invalid={hasPageError("trainingDays") || undefined} value={draft.trainingDays} onChange={(event) => update("trainingDays", event.target.value)} /></label>
-                <label className="field"><span>IANA time zone</span><select aria-invalid={hasPageError("timeZone") || undefined} value={draft.timeZone} onChange={(event) => update("timeZone", event.target.value)}><option>UTC</option><option>America/New_York</option><option>America/Chicago</option><option>America/Denver</option><option>America/Los_Angeles</option><option>Europe/London</option><option>Asia/Shanghai</option></select></label>
+                <label className="field">
+                  <span>IANA time zone</span>
+                  <input
+                    aria-invalid={hasPageError("timeZone") || undefined}
+                    list="onboarding-time-zones"
+                    value={draft.timeZone}
+                    onChange={(event) => update("timeZone", event.target.value)}
+                    placeholder="America/New_York"
+                  />
+                  <datalist id="onboarding-time-zones">
+                    {["UTC", "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "Europe/London", "Asia/Shanghai"].map((zone) => <option value={zone} key={zone} />)}
+                  </datalist>
+                  <button
+                    className="text-link"
+                    type="button"
+                    onClick={() => {
+                      const detected = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+                      update("timeZone", detected);
+                      setAnnouncement(`Device time zone set to ${detected}.`);
+                    }}
+                  >
+                    Use device time zone
+                  </button>
+                  <span className="field-help">
+                    Detected automatically when possible. You can enter any valid IANA zone.
+                  </span>
+                </label>
                 <label className="field"><span>Allergies</span><input value={draft.allergies} onChange={(event) => update("allergies", event.target.value)} placeholder="Hard exclusions" /></label>
                 <label className="field"><span>Dietary restrictions</span><input value={draft.restrictions} onChange={(event) => update("restrictions", event.target.value)} /></label>
               </div>
@@ -1175,7 +1289,7 @@ export function OnboardingFlow({
               {safetyFlag ? (
                 <div className="message-box" style={{ marginTop: "1rem" }}>
                   <ShieldCheck size={19} />
-                  <span>Thank you for sharing. Cutting Plan will not generate an aggressive calorie-restriction plan. Safe, non-restrictive tracking remains available, and a qualified healthcare professional or registered dietitian can help with individual guidance. Concerning symptoms such as fainting or heart palpitations warrant prompt medical attention.</span>
+                  <span>Thank you for sharing. {BRAND.name} will not generate an aggressive calorie-restriction plan. Safe, non-restrictive tracking remains available, and a qualified healthcare professional or registered dietitian can help with individual guidance. Concerning symptoms such as fainting or heart palpitations warrant prompt medical attention.</span>
                 </div>
               ) : null}
               <div className="onboarding-actions">
@@ -1208,7 +1322,7 @@ export function OnboardingFlow({
                   <ul style={{ color: "var(--ink-soft)", fontSize: ".82rem", paddingLeft: "1.2rem" }}>
                     <li>Age, optional gender and height, preferred unit, and time zone.</li>
                     <li>Start/latest/target weights, goal, target date, activity, and training.</li>
-                    <li>Selected verified food IDs, allergies, restrictions, and acknowledged warnings.</li>
+                    <li>Exact verified food names and catalog IDs, including brand, product, and flavor names when selected; plus allergies, restrictions, and acknowledged warnings.</li>
                     <li>App-calculated ranges and safety flags. Passwords and raw OTP codes are never included.</li>
                   </ul>
                 </section>

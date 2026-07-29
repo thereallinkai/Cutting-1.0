@@ -119,6 +119,89 @@ export type Database = {
         }
         Relationships: []
       }
+      daily_meal_checkins: {
+        Row: {
+          created_at: string
+          id: string
+          local_date: string
+          meal_type: Database["public"]["Enums"]["meal_type"]
+          skip_reason: string | null
+          status: Database["public"]["Enums"]["meal_checkin_status"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          local_date: string
+          meal_type: Database["public"]["Enums"]["meal_type"]
+          skip_reason?: string | null
+          status?: Database["public"]["Enums"]["meal_checkin_status"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          local_date?: string
+          meal_type?: Database["public"]["Enums"]["meal_type"]
+          skip_reason?: string | null
+          status?: Database["public"]["Enums"]["meal_checkin_status"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_meal_checkins_user_id_local_date_fkey"
+            columns: ["user_id", "local_date"]
+            isOneToOne: false
+            referencedRelation: "daily_checkins"
+            referencedColumns: ["user_id", "local_date"]
+          },
+        ]
+      }
+      daily_meal_items: {
+        Row: {
+          created_at: string
+          food_id: string
+          id: string
+          meal_checkin_id: string
+          sort_order: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          food_id: string
+          id?: string
+          meal_checkin_id: string
+          sort_order: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          food_id?: string
+          id?: string
+          meal_checkin_id?: string
+          sort_order?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_meal_items_food_id_fkey"
+            columns: ["food_id"]
+            isOneToOne: false
+            referencedRelation: "foods"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_meal_items_meal_checkin_id_user_id_fkey"
+            columns: ["meal_checkin_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "daily_meal_checkins"
+            referencedColumns: ["id", "user_id"]
+          },
+        ]
+      }
       dietary_restriction_types: {
         Row: {
           aliases: string[]
@@ -137,6 +220,27 @@ export type Database = {
           english_label?: string
           id?: string
           slug?: string
+        }
+        Relationships: []
+      }
+      external_food_lookup_requests: {
+        Row: {
+          id: string
+          provider: Database["public"]["Enums"]["food_source_provider"]
+          requested_at: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          provider: Database["public"]["Enums"]["food_source_provider"]
+          requested_at?: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          provider?: Database["public"]["Enums"]["food_source_provider"]
+          requested_at?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -248,69 +352,268 @@ export type Database = {
           },
         ]
       }
+      food_label_images: {
+        Row: {
+          byte_size: number
+          created_at: string
+          id: string
+          image_kind: Database["public"]["Enums"]["food_label_image_kind"]
+          mime_type: string
+          object_path: string
+          pixel_height: number
+          pixel_width: number
+          sha256: string
+          submission_id: string
+          user_id: string
+        }
+        Insert: {
+          byte_size: number
+          created_at?: string
+          id?: string
+          image_kind: Database["public"]["Enums"]["food_label_image_kind"]
+          mime_type: string
+          object_path: string
+          pixel_height: number
+          pixel_width: number
+          sha256: string
+          submission_id: string
+          user_id: string
+        }
+        Update: {
+          byte_size?: number
+          created_at?: string
+          id?: string
+          image_kind?: Database["public"]["Enums"]["food_label_image_kind"]
+          mime_type?: string
+          object_path?: string
+          pixel_height?: number
+          pixel_width?: number
+          sha256?: string
+          submission_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "food_label_images_submission_id_user_id_fkey"
+            columns: ["submission_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "food_label_submissions"
+            referencedColumns: ["id", "user_id"]
+          },
+        ]
+      }
+      food_label_submissions: {
+        Row: {
+          brand_name: string
+          created_at: string
+          gtin: string | null
+          id: string
+          label_data: Json
+          package_description: string | null
+          private_food_id: string | null
+          product_name: string
+          published_food_id: string | null
+          review_note: string | null
+          reviewed_at: string | null
+          status: Database["public"]["Enums"]["food_label_submission_status"]
+          submitted_at: string | null
+          updated_at: string
+          user_id: string
+          variant_name: string | null
+        }
+        Insert: {
+          brand_name: string
+          created_at?: string
+          gtin?: string | null
+          id?: string
+          label_data: Json
+          package_description?: string | null
+          private_food_id?: string | null
+          product_name: string
+          published_food_id?: string | null
+          review_note?: string | null
+          reviewed_at?: string | null
+          status?: Database["public"]["Enums"]["food_label_submission_status"]
+          submitted_at?: string | null
+          updated_at?: string
+          user_id: string
+          variant_name?: string | null
+        }
+        Update: {
+          brand_name?: string
+          created_at?: string
+          gtin?: string | null
+          id?: string
+          label_data?: Json
+          package_description?: string | null
+          private_food_id?: string | null
+          product_name?: string
+          published_food_id?: string | null
+          review_note?: string | null
+          reviewed_at?: string | null
+          status?: Database["public"]["Enums"]["food_label_submission_status"]
+          submitted_at?: string | null
+          updated_at?: string
+          user_id?: string
+          variant_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "food_label_submissions_private_food_id_fkey"
+            columns: ["private_food_id"]
+            isOneToOne: false
+            referencedRelation: "foods"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "food_label_submissions_published_food_id_fkey"
+            columns: ["published_food_id"]
+            isOneToOne: false
+            referencedRelation: "foods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      food_nutrient_amounts: {
+        Row: {
+          amount: number
+          created_at: string
+          daily_value_percent: number | null
+          display_name: string
+          display_order: number
+          nutrient_code: string
+          nutrition_id: string
+          unit: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          daily_value_percent?: number | null
+          display_name: string
+          display_order?: number
+          nutrient_code: string
+          nutrition_id: string
+          unit: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          daily_value_percent?: number | null
+          display_name?: string
+          display_order?: number
+          nutrient_code?: string
+          nutrition_id?: string
+          unit?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "food_nutrient_amounts_nutrition_id_fkey"
+            columns: ["nutrition_id"]
+            isOneToOne: false
+            referencedRelation: "food_nutrition"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       food_nutrition: {
         Row: {
+          added_sugars_g: number | null
+          calcium_mg: number | null
           calories: number | null
           carbohydrate_g: number | null
+          cholesterol_mg: number | null
           created_at: string
+          energy_kj: number | null
           fat_g: number | null
           fiber_g: number | null
           food_id: string
           id: string
+          iron_mg: number | null
           measurement_basis: Database["public"]["Enums"]["measurement_basis"]
+          potassium_mg: number | null
           protein_g: number | null
           reference_quantity: number
           reference_unit: Database["public"]["Enums"]["nutrition_reference_unit"]
+          saturated_fat_g: number | null
+          serving_description: string | null
           serving_weight_grams: number | null
           sodium_mg: number | null
+          source_id: string | null
           source_name: string | null
           source_reference: string | null
           source_version: string | null
+          total_sugars_g: number | null
+          trans_fat_g: number | null
           updated_at: string
           verification_status: Database["public"]["Enums"]["verification_status"]
           verified_at: string | null
+          vitamin_d_mcg: number | null
         }
         Insert: {
+          added_sugars_g?: number | null
+          calcium_mg?: number | null
           calories?: number | null
           carbohydrate_g?: number | null
+          cholesterol_mg?: number | null
           created_at?: string
+          energy_kj?: number | null
           fat_g?: number | null
           fiber_g?: number | null
           food_id: string
           id?: string
+          iron_mg?: number | null
           measurement_basis: Database["public"]["Enums"]["measurement_basis"]
+          potassium_mg?: number | null
           protein_g?: number | null
           reference_quantity: number
           reference_unit: Database["public"]["Enums"]["nutrition_reference_unit"]
+          saturated_fat_g?: number | null
+          serving_description?: string | null
           serving_weight_grams?: number | null
           sodium_mg?: number | null
+          source_id?: string | null
           source_name?: string | null
           source_reference?: string | null
           source_version?: string | null
+          total_sugars_g?: number | null
+          trans_fat_g?: number | null
           updated_at?: string
           verification_status: Database["public"]["Enums"]["verification_status"]
           verified_at?: string | null
+          vitamin_d_mcg?: number | null
         }
         Update: {
+          added_sugars_g?: number | null
+          calcium_mg?: number | null
           calories?: number | null
           carbohydrate_g?: number | null
+          cholesterol_mg?: number | null
           created_at?: string
+          energy_kj?: number | null
           fat_g?: number | null
           fiber_g?: number | null
           food_id?: string
           id?: string
+          iron_mg?: number | null
           measurement_basis?: Database["public"]["Enums"]["measurement_basis"]
+          potassium_mg?: number | null
           protein_g?: number | null
           reference_quantity?: number
           reference_unit?: Database["public"]["Enums"]["nutrition_reference_unit"]
+          saturated_fat_g?: number | null
+          serving_description?: string | null
           serving_weight_grams?: number | null
           sodium_mg?: number | null
+          source_id?: string | null
           source_name?: string | null
           source_reference?: string | null
           source_version?: string | null
+          total_sugars_g?: number | null
+          trans_fat_g?: number | null
           updated_at?: string
           verification_status?: Database["public"]["Enums"]["verification_status"]
           verified_at?: string | null
+          vitamin_d_mcg?: number | null
         }
         Relationships: [
           {
@@ -320,12 +623,182 @@ export type Database = {
             referencedRelation: "foods"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "food_nutrition_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "food_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      food_products: {
+        Row: {
+          brand_name: string
+          country_codes: string[]
+          created_at: string
+          food_id: string
+          gtin: string | null
+          manufacturer_name: string | null
+          package_description: string | null
+          parent_food_id: string | null
+          product_name: string
+          updated_at: string
+          variant_name: string | null
+        }
+        Insert: {
+          brand_name: string
+          country_codes?: string[]
+          created_at?: string
+          food_id: string
+          gtin?: string | null
+          manufacturer_name?: string | null
+          package_description?: string | null
+          parent_food_id?: string | null
+          product_name: string
+          updated_at?: string
+          variant_name?: string | null
+        }
+        Update: {
+          brand_name?: string
+          country_codes?: string[]
+          created_at?: string
+          food_id?: string
+          gtin?: string | null
+          manufacturer_name?: string | null
+          package_description?: string | null
+          parent_food_id?: string | null
+          product_name?: string
+          updated_at?: string
+          variant_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "food_products_food_id_fkey"
+            columns: ["food_id"]
+            isOneToOne: true
+            referencedRelation: "foods"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "food_products_parent_food_id_fkey"
+            columns: ["parent_food_id"]
+            isOneToOne: false
+            referencedRelation: "foods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      food_safety_metadata: {
+        Row: {
+          allergen_data_status: Database["public"]["Enums"]["food_safety_data_status"]
+          allergen_statement: string | null
+          created_at: string
+          food_id: string
+          ingredients_text: string | null
+          restriction_data_status: Database["public"]["Enums"]["food_safety_data_status"]
+          source_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          allergen_data_status?: Database["public"]["Enums"]["food_safety_data_status"]
+          allergen_statement?: string | null
+          created_at?: string
+          food_id: string
+          ingredients_text?: string | null
+          restriction_data_status?: Database["public"]["Enums"]["food_safety_data_status"]
+          source_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          allergen_data_status?: Database["public"]["Enums"]["food_safety_data_status"]
+          allergen_statement?: string | null
+          created_at?: string
+          food_id?: string
+          ingredients_text?: string | null
+          restriction_data_status?: Database["public"]["Enums"]["food_safety_data_status"]
+          source_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "food_safety_metadata_food_id_fkey"
+            columns: ["food_id"]
+            isOneToOne: true
+            referencedRelation: "foods"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "food_safety_metadata_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "food_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      food_sources: {
+        Row: {
+          attribution_text: string | null
+          created_at: string
+          external_id: string
+          food_id: string
+          id: string
+          license_code: string | null
+          payload_sha256: string | null
+          provider: Database["public"]["Enums"]["food_source_provider"]
+          retrieved_at: string
+          source_modified_at: string | null
+          source_url: string | null
+          source_version: string | null
+          updated_at: string
+        }
+        Insert: {
+          attribution_text?: string | null
+          created_at?: string
+          external_id: string
+          food_id: string
+          id?: string
+          license_code?: string | null
+          payload_sha256?: string | null
+          provider: Database["public"]["Enums"]["food_source_provider"]
+          retrieved_at?: string
+          source_modified_at?: string | null
+          source_url?: string | null
+          source_version?: string | null
+          updated_at?: string
+        }
+        Update: {
+          attribution_text?: string | null
+          created_at?: string
+          external_id?: string
+          food_id?: string
+          id?: string
+          license_code?: string | null
+          payload_sha256?: string | null
+          provider?: Database["public"]["Enums"]["food_source_provider"]
+          retrieved_at?: string
+          source_modified_at?: string | null
+          source_url?: string | null
+          source_version?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "food_sources_food_id_fkey"
+            columns: ["food_id"]
+            isOneToOne: false
+            referencedRelation: "foods"
+            referencedColumns: ["id"]
+          },
         ]
       }
       foods: {
         Row: {
+          catalog_status: Database["public"]["Enums"]["food_catalog_status"]
           created_at: string
           english_name: string
+          food_kind: Database["public"]["Enums"]["food_kind"]
           icon_ref: string | null
           id: string
           owner_user_id: string | null
@@ -336,8 +809,10 @@ export type Database = {
           verification_status: Database["public"]["Enums"]["verification_status"]
         }
         Insert: {
+          catalog_status?: Database["public"]["Enums"]["food_catalog_status"]
           created_at?: string
           english_name: string
+          food_kind?: Database["public"]["Enums"]["food_kind"]
           icon_ref?: string | null
           id?: string
           owner_user_id?: string | null
@@ -348,8 +823,10 @@ export type Database = {
           verification_status: Database["public"]["Enums"]["verification_status"]
         }
         Update: {
+          catalog_status?: Database["public"]["Enums"]["food_catalog_status"]
           created_at?: string
           english_name?: string
+          food_kind?: Database["public"]["Enums"]["food_kind"]
           icon_ref?: string | null
           id?: string
           owner_user_id?: string | null
@@ -697,6 +1174,8 @@ export type Database = {
           onboarding_completed_at: string | null
           onboarding_status: Database["public"]["Enums"]["onboarding_status"]
           preferred_weight_unit: Database["public"]["Enums"]["weight_unit"]
+          product_tour_completed_at: string | null
+          product_tour_completed_version: number
           safety_context: string | null
           time_zone: string
           training_days_per_week: number | null
@@ -717,6 +1196,8 @@ export type Database = {
           onboarding_completed_at?: string | null
           onboarding_status?: Database["public"]["Enums"]["onboarding_status"]
           preferred_weight_unit?: Database["public"]["Enums"]["weight_unit"]
+          product_tour_completed_at?: string | null
+          product_tour_completed_version?: number
           safety_context?: string | null
           time_zone?: string
           training_days_per_week?: number | null
@@ -737,6 +1218,8 @@ export type Database = {
           onboarding_completed_at?: string | null
           onboarding_status?: Database["public"]["Enums"]["onboarding_status"]
           preferred_weight_unit?: Database["public"]["Enums"]["weight_unit"]
+          product_tour_completed_at?: string | null
+          product_tour_completed_version?: number
           safety_context?: string | null
           time_zone?: string
           training_days_per_week?: number | null
@@ -784,9 +1267,41 @@ export type Database = {
     }
     Functions: {
       accept_plan: { Args: { target_plan_id: string }; Returns: string }
+      add_daily_meal_item: {
+        Args: {
+          checkin_date: string
+          target_food_id: string
+          target_meal_type: Database["public"]["Enums"]["meal_type"]
+        }
+        Returns: {
+          created_at: string
+          food_id: string
+          id: string
+          meal_checkin_id: string
+          sort_order: number
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "daily_meal_items"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       application_health: {
         Args: { expected_migration: string }
         Returns: Json
+      }
+      cache_external_food: {
+        Args: {
+          normalized_food: Json
+          normalized_nutrition: Json
+          source_external_id: string
+          source_metadata: Json
+          source_provider: Database["public"]["Enums"]["food_source_provider"]
+          source_snapshot: Json
+        }
+        Returns: string
       }
       complete_onboarding: {
         Args: {
@@ -812,6 +1327,55 @@ export type Database = {
         }
         Returns: string
       }
+      create_confirmed_label_food: {
+        Args: { label_data: Json; label_submission_id?: string }
+        Returns: string
+      }
+      delete_daily_meal_item: {
+        Args: { target_item_id: string }
+        Returns: string
+      }
+      plan_eligible_food_ids: {
+        Args: { candidate_food_ids: string[] }
+        Returns: {
+          food_id: string
+        }[]
+      }
+      record_external_food_lookup: {
+        Args: {
+          lookup_provider: Database["public"]["Enums"]["food_source_provider"]
+          target_user_id: string
+        }
+        Returns: boolean
+      }
+      reserve_food_label_upload: {
+        Args: {
+          target_image_kind: Database["public"]["Enums"]["food_label_image_kind"]
+          target_submission_id: string
+          target_user_id: string
+        }
+        Returns: {
+          allowed: boolean
+          existing_image_id: string
+          existing_object_path: string
+          rate_limited: boolean
+        }[]
+      }
+      reserve_plan_generation: {
+        Args: {
+          request_idempotency_key: string
+          request_model: string
+          request_prompt_version: string
+          request_provider: string
+          target_user_id: string
+        }
+        Returns: {
+          plan_id: string
+          request_id: string
+          request_status: Database["public"]["Enums"]["ai_request_status"]
+          result_state: string
+        }[]
+      }
       save_plan_version: {
         Args: {
           generation_request_id: string
@@ -824,6 +1388,104 @@ export type Database = {
           target_user_id: string
         }
         Returns: string
+      }
+      search_food_catalog: {
+        Args: {
+          result_limit?: number
+          result_offset?: number
+          search_query?: string
+        }
+        Returns: {
+          brand_name: string
+          catalog_status: Database["public"]["Enums"]["food_catalog_status"]
+          categories: string[]
+          english_name: string
+          food_kind: Database["public"]["Enums"]["food_kind"]
+          gtin: string
+          icon_ref: string
+          id: string
+          nutrition: Json
+          ownership_type: Database["public"]["Enums"]["food_ownership_type"]
+          package_description: string
+          plan_eligible: boolean
+          product_name: string
+          slug: string
+          source: Json
+          total_count: number
+          variant_name: string
+          verification_status: Database["public"]["Enums"]["verification_status"]
+        }[]
+      }
+      set_daily_checkin_note: {
+        Args: { checkin_date: string; desired_note: string }
+        Returns: {
+          breakfast_completed: boolean
+          created_at: string
+          dinner_completed: boolean
+          id: string
+          local_date: string
+          lunch_completed: boolean
+          notes: string | null
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "daily_checkins"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      set_daily_meal_checkin: {
+        Args: {
+          checkin_date: string
+          desired_skip_reason?: string
+          desired_status: Database["public"]["Enums"]["meal_checkin_status"]
+          target_meal_type: Database["public"]["Enums"]["meal_type"]
+        }
+        Returns: {
+          created_at: string
+          id: string
+          local_date: string
+          meal_type: Database["public"]["Enums"]["meal_type"]
+          skip_reason: string | null
+          status: Database["public"]["Enums"]["meal_checkin_status"]
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "daily_meal_checkins"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      submit_food_label: {
+        Args: { target_submission_id: string }
+        Returns: {
+          brand_name: string
+          created_at: string
+          gtin: string | null
+          id: string
+          label_data: Json
+          package_description: string | null
+          private_food_id: string | null
+          product_name: string
+          published_food_id: string | null
+          review_note: string | null
+          reviewed_at: string | null
+          status: Database["public"]["Enums"]["food_label_submission_status"]
+          submitted_at: string | null
+          updated_at: string
+          user_id: string
+          variant_name: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "food_label_submissions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       upsert_daily_checkin: {
         Args: {
@@ -860,7 +1522,35 @@ export type Database = {
         | "very_active"
         | "extremely_active"
       ai_request_status: "pending" | "processing" | "succeeded" | "failed"
+      food_catalog_status:
+        | "active"
+        | "pending_review"
+        | "rejected"
+        | "retired"
+      food_kind: "generic" | "branded_product"
+      food_label_image_kind:
+        | "front"
+        | "nutrition"
+        | "ingredients"
+        | "barcode"
+      food_label_submission_status:
+        | "draft"
+        | "submitted"
+        | "needs_changes"
+        | "approved"
+        | "rejected"
+        | "matched"
       food_ownership_type: "catalog" | "private"
+      food_safety_data_status:
+        | "unknown"
+        | "source_reported"
+        | "user_confirmed"
+        | "reviewed"
+      food_source_provider:
+        | "usda_fdc"
+        | "open_food_facts"
+        | "user_label"
+        | "manual_review"
       goal_status: "draft" | "active" | "completed" | "cancelled" | "archived"
       goal_type:
         | "fat_loss"
@@ -868,7 +1558,14 @@ export type Database = {
         | "maintenance"
         | "body_recomposition"
       legal_document_type: "terms" | "privacy"
-      meal_type: "breakfast" | "lunch" | "dinner"
+      meal_checkin_status: "not_marked" | "completed" | "skipped"
+      meal_type:
+        | "breakfast"
+        | "morning_snack"
+        | "lunch"
+        | "afternoon_snack"
+        | "dinner"
+        | "evening_snack"
       measurement_basis: "raw" | "dry" | "cooked" | "as_sold" | "label_serving"
       nutrition_reference_unit: "g" | "serving"
       onboarding_status: "not_started" | "in_progress" | "completed"
@@ -882,6 +1579,7 @@ export type Database = {
       verification_status:
         | "verified"
         | "user_label"
+        | "source_reported"
         | "pending_verification"
         | "unavailable"
       warning_context_type: "onboarding" | "plan"
@@ -1021,7 +1719,40 @@ export const Constants = {
         "extremely_active",
       ],
       ai_request_status: ["pending", "processing", "succeeded", "failed"],
+      food_catalog_status: [
+        "active",
+        "pending_review",
+        "rejected",
+        "retired",
+      ],
+      food_kind: ["generic", "branded_product"],
+      food_label_image_kind: [
+        "front",
+        "nutrition",
+        "ingredients",
+        "barcode",
+      ],
+      food_label_submission_status: [
+        "draft",
+        "submitted",
+        "needs_changes",
+        "approved",
+        "rejected",
+        "matched",
+      ],
       food_ownership_type: ["catalog", "private"],
+      food_safety_data_status: [
+        "unknown",
+        "source_reported",
+        "user_confirmed",
+        "reviewed",
+      ],
+      food_source_provider: [
+        "usda_fdc",
+        "open_food_facts",
+        "user_label",
+        "manual_review",
+      ],
       goal_status: ["draft", "active", "completed", "cancelled", "archived"],
       goal_type: [
         "fat_loss",
@@ -1030,7 +1761,15 @@ export const Constants = {
         "body_recomposition",
       ],
       legal_document_type: ["terms", "privacy"],
-      meal_type: ["breakfast", "lunch", "dinner"],
+      meal_checkin_status: ["not_marked", "completed", "skipped"],
+      meal_type: [
+        "breakfast",
+        "morning_snack",
+        "lunch",
+        "afternoon_snack",
+        "dinner",
+        "evening_snack",
+      ],
       measurement_basis: ["raw", "dry", "cooked", "as_sold", "label_serving"],
       nutrition_reference_unit: ["g", "serving"],
       onboarding_status: ["not_started", "in_progress", "completed"],
@@ -1045,6 +1784,7 @@ export const Constants = {
       verification_status: [
         "verified",
         "user_label",
+        "source_reported",
         "pending_verification",
         "unavailable",
       ],

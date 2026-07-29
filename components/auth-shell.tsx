@@ -1,16 +1,10 @@
-import Link from "next/link";
-import { Leaf } from "lucide-react";
+import { BrandLink } from "@/components/brand-link";
 
 export function AuthShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="auth-shell">
       <aside className="auth-aside">
-        <Link className="brand" href="/" aria-label="Cutting Plan home">
-          <span className="brand-mark" aria-hidden="true">
-            <Leaf size={19} />
-          </span>
-          Cutting Plan
-        </Link>
+        <BrandLink />
         <div className="auth-quote">
           <p>A useful plan should make your day feel clearer, not smaller.</p>
           <small>
