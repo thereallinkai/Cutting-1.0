@@ -22,6 +22,7 @@ const profileData: ProfileViewData = {
   },
   profile: {
     fullName: "Morgan Green",
+    dateOfBirth: "1997-04-12",
     age: 29,
     gender: "prefer_not_to_say",
     heightCm: 170,
@@ -136,6 +137,14 @@ describe("ProfileView", () => {
     expect(
       screen.getByRole("heading", { level: 1, name: "Morgan Green" }),
     ).toBeInTheDocument();
+    const personalDetails = screen.getByRole("region", {
+      name: "Personal details",
+    });
+    expect(personalDetails).toHaveTextContent(
+      "Confirmed date of birth is read-only.",
+    );
+    expect(personalDetails).toHaveTextContent("Date of birthApril 12, 1997");
+    expect(personalDetails).toHaveTextContent("Current age29");
     expect(
       screen.getByText(
         "Optional safety context is on file. Its private text is not repeated on this overview.",

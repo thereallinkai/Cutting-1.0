@@ -5,6 +5,8 @@ import {
   calculateNutritionEstimate,
   evaluateSafetyContext,
   filterEligibleFoods,
+  localDateInTimeZone,
+  resolveProfileAge,
   validateAiPlanDomain,
   validatePlanNutritionRanges,
   type AllowedPlanFood,
@@ -335,8 +337,14 @@ export async function POST(request: Request) {
 
     const startWeight = weights.find((entry) => entry.is_onboarding_baseline) ?? weights[0]!;
     const latestWeight = weights[weights.length - 1]!;
+    const profileAge = resolveProfileAge(
+      profile.date_of_birth,
+      profile.age,
+      localDateInTimeZone(new Date(), profile.time_zone),
+    );
+    if (profileAge === null) throw new Error("trusted_profile_incomplete");
     const safety = evaluateSafetyContext({
-      ageYears: profile.age,
+      ageYears: profileAge,
       relevantMedicalConcerns: Boolean(profile.safety_context),
     });
     const activityMap = {
@@ -349,7 +357,7 @@ export async function POST(request: Request) {
     const estimate = calculateNutritionEstimate({
       weightKg: latestWeight.weight_kg,
       heightCm: profile.height_cm,
-      ageYears: profile.age,
+      ageYears: profileAge,
       sexForEstimate:
         profile.gender === "male" || profile.gender === "female"
           ? profile.gender
@@ -362,7 +370,7 @@ export async function POST(request: Request) {
     const input: PlanProviderInput = {
       safetyIdentifier: createHash("sha256").update(`lets-go-green:${user.id}`).digest("hex"),
       profile: {
-        age: profile.age ?? 18,
+        age: profileAge,
         gender: profile.gender,
         heightCm: profile.height_cm,
         currentWeightKg: latestWeight.weight_kg,

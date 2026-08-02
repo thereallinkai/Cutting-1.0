@@ -1165,6 +1165,7 @@ export type Database = {
           age: number | null
           allergies: string[]
           created_at: string
+          date_of_birth: string | null
           dietary_restrictions: string[]
           disliked_foods: string[]
           full_name: string
@@ -1187,6 +1188,7 @@ export type Database = {
           age?: number | null
           allergies?: string[]
           created_at?: string
+          date_of_birth?: string | null
           dietary_restrictions?: string[]
           disliked_foods?: string[]
           full_name: string
@@ -1209,6 +1211,7 @@ export type Database = {
           age?: number | null
           allergies?: string[]
           created_at?: string
+          date_of_birth?: string | null
           dietary_restrictions?: string[]
           disliked_foods?: string[]
           full_name?: string

@@ -68,7 +68,7 @@ software directly on your computer.
 
     ```dotenv
     USDA_FDC_API_KEY=
-    FOOD_LOOKUP_USER_AGENT=LetsGoGreen/1.0.0-beta.1 (https://github.com/thereallinkai/Lets-Go-Green)
+    FOOD_LOOKUP_USER_AGENT=LetsGoGreen/1.0.0-beta.2 (https://github.com/thereallinkai/Lets-Go-Green)
     ```
 
     Restart `npm run dev:all` after changing environment values. Open Food Facts
@@ -158,7 +158,9 @@ Open `/register` and submit the empty form.
 - [ ] An error summary appears and receives focus.
 - [ ] Full name must contain at least two characters.
 - [ ] Gender must be selected.
-- [ ] Age must be a whole number from 13 through 120.
+- [ ] Date of birth must be a real calendar date that produces an age from 13
+  through 120; a future date, an under-13 date, and an over-120 date are
+  rejected.
 - [ ] Invalid email is rejected.
 - [ ] Passwords shorter than 10 characters are rejected.
 - [ ] Mismatched passwords focus the confirmation field.
@@ -166,8 +168,25 @@ Open `/register` and submit the empty form.
 - [ ] Password reveal/hide controls work and have accessible names.
 - [ ] Terms and Privacy links open the correct documents.
 
-Enter safe non-password fields, refresh the page, and confirm those fields are
-restored. Password fields must not be restored.
+Enter safe non-password fields, including date of birth, refresh the page, and
+confirm those fields are restored within the same tab session. Password fields
+and the Terms and Privacy consent boxes must not be restored. Close the tab,
+open registration in a new tab session, and confirm the temporary registration
+draft is gone.
+
+Complete every field and select **Create account**:
+
+- [ ] No request is sent immediately. A focused confirmation dialog shows the
+  entered date of birth and the age calculated from it using the browser's
+  detected IANA time zone.
+- [ ] The dialog clearly says that date of birth cannot be changed after
+  account creation.
+- [ ] **Cancel and edit** closes the dialog, returns focus to **Create
+  account**, and allows the date to be corrected.
+- [ ] **Confirm and create account** submits once, cannot be double-activated
+  while pending, and continues to email verification after success.
+- [ ] Escape closes the dialog before submission, and Tab/Shift+Tab remain
+  trapped inside it while open.
 
 ### Create and verify Account A
 
@@ -184,6 +203,12 @@ restored. Password fields must not be restored.
 5. Open the newest signup message for Account A and copy its six-digit token.
 6. Enter the token and select **Verify and continue**.
 7. Confirm step 3, **What works on your plate?**, appears.
+
+After verification, open Profile and confirm the stored date of birth is
+presented as read-only and the displayed age is derived from it. The review
+screen may identify the derived age as an AI input, but must not list or send
+the raw date of birth. Near a local-date boundary, the confirmed and displayed
+age must use the same saved time zone rather than changing at UTC midnight.
 
 Resend behavior:
 
@@ -890,6 +915,13 @@ the public/auth pages:
   information depends on animation and decorative transitions are reduced.
 - [ ] Without reduced motion, green page/dialog transitions remain subtle,
   preserve reading position, and never delay input or focus.
+- [ ] Page sections, cards, list rows, dialogs, and feedback surfaces enter with
+  one coherent staggered rhythm instead of appearing abruptly.
+- [ ] With a fine pointer, every genuine button, link, tab, disclosure, and
+  clickable card receives an immediate highlight plus a small transform on
+  hover/press; static cards do not pretend to be clickable.
+- [ ] Press feedback uses transforms rather than changing layout dimensions, so
+  neighboring text and controls never jump.
 
 The automated axe gate checks serious and critical findings; it is not a
 substitute for this keyboard, screen-reader, zoom, and visual review.

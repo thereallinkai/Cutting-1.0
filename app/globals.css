@@ -22,9 +22,12 @@
   --radius-sm: 10px;
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
   --motion-fast: 140ms;
   --motion-base: 200ms;
   --motion-slow: 360ms;
+  --motion-enter: 480ms;
+  --interaction-ring: rgba(184, 227, 109, 0.42);
 }
 
 * {
@@ -63,6 +66,15 @@ textarea {
 button,
 a {
   -webkit-tap-highlight-color: transparent;
+}
+
+button,
+[role="button"],
+a[href],
+summary,
+.option-card,
+.category-badge:has(input) {
+  touch-action: manipulation;
 }
 
 a {
@@ -712,8 +724,10 @@ img {
 
 @keyframes auth-card-enter {
   from {
-    opacity: 0;
     transform: translateY(12px);
+  }
+  to {
+    transform: translateY(0);
   }
 }
 
@@ -844,6 +858,10 @@ img {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
+}
+
+.registration-demographics {
+  align-items: flex-start;
 }
 
 .form-row a,
@@ -1007,18 +1025,27 @@ details.message-box[open] > summary {
 
 @keyframes feedback-enter {
   from {
-    opacity: 0;
     transform: translateY(-4px);
+  }
+  to {
+    transform: translateY(0);
   }
 }
 
 @keyframes overlay-enter {
   from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @keyframes dialog-enter {
   from {
     transform: translate(-50%, calc(-50% + 12px)) scale(0.985);
+  }
+  72% {
+    transform: translate(-50%, -50%) scale(1.006);
+  }
+  to {
+    transform: translate(-50%, -50%) scale(1);
   }
 }
 
@@ -1264,6 +1291,9 @@ details.message-box[open] > summary {
   from {
     transform: translateY(8px);
   }
+  to {
+    transform: translateY(0);
+  }
 }
 
 .page-header h1 {
@@ -1302,11 +1332,6 @@ details.message-box[open] > summary {
 
 .ui-card {
   border-color: var(--line);
-}
-
-.ui-card:hover {
-  border-color: #a9c9af;
-  box-shadow: 0 18px 46px rgba(18, 74, 44, 0.1);
 }
 
 .card-title {
@@ -1430,13 +1455,6 @@ details.message-box[open] > summary {
     border-color var(--motion-base) ease,
     box-shadow var(--motion-base) ease,
     transform var(--motion-base) var(--ease-out);
-}
-
-.meal-row:hover {
-  border-color: #9fc1a6;
-  background: var(--paper-elevated);
-  box-shadow: var(--shadow-sm);
-  transform: translateY(-1px);
 }
 
 .meal-icon {
@@ -1567,11 +1585,6 @@ details.message-box[open] > summary {
   transition:
     background-color var(--motion-base) ease,
     transform var(--motion-base) var(--ease-out);
-}
-
-.metric:hover {
-  background: #e6f2e5;
-  transform: translateY(-1px);
 }
 
 .metric span {
@@ -1733,12 +1746,6 @@ details.message-box[open] > summary {
     border-color var(--motion-base) ease,
     box-shadow var(--motion-base) ease,
     transform var(--motion-base) var(--ease-out);
-}
-
-.plan-meal-card:hover {
-  border-color: #a1c3a8;
-  box-shadow: var(--shadow-sm);
-  transform: translateY(-2px);
 }
 
 .plan-meal-card h3 {
@@ -1973,12 +1980,6 @@ details.message-box[open] > summary {
     border-color var(--motion-base) ease,
     box-shadow var(--motion-base) ease,
     transform var(--motion-base) var(--ease-out);
-}
-
-.summary-stat:hover {
-  border-color: #a1c3a8;
-  box-shadow: var(--shadow-sm);
-  transform: translateY(-2px);
 }
 
 .summary-stat span {
@@ -2766,6 +2767,456 @@ details.message-box[open] > summary {
   cursor: pointer;
 }
 
+/* Cohesive motion and interaction language */
+@keyframes surface-rise {
+  from {
+    transform: translate3d(0, 12px, 0) scale(0.992);
+  }
+  to {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes rail-enter {
+  from {
+    transform: translate3d(-12px, 0, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes chrome-down {
+  from {
+    transform: translate3d(0, -8px, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes chrome-up {
+  from {
+    transform: translate3d(0, 10px, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes disclosure-reveal {
+  from {
+    transform: translateY(-5px);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes progress-sweep {
+  from {
+    opacity: 0.5;
+    transform: scaleX(0.12);
+  }
+  to {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+}
+
+@keyframes spark-rise {
+  from {
+    opacity: 0.2;
+    transform: scaleY(0.15);
+  }
+  to {
+    opacity: 0.9;
+    transform: scaleY(1);
+  }
+}
+
+@keyframes ring-settle {
+  from {
+    transform: rotate(45deg) scale(0.88);
+  }
+  to {
+    transform: rotate(45deg) scale(1);
+  }
+}
+
+.landing-header,
+.mobile-app-header {
+  animation: chrome-down var(--motion-enter) var(--ease-emphasized) backwards;
+}
+
+.sidebar,
+.onboarding-rail,
+.auth-aside {
+  animation: rail-enter 520ms var(--ease-emphasized) backwards;
+}
+
+.mobile-nav {
+  animation: chrome-up var(--motion-enter) var(--ease-emphasized) backwards;
+}
+
+.principles,
+.landing-footer {
+  animation: surface-rise 540ms var(--ease-emphasized) backwards;
+}
+
+:is(
+  .auth-aside,
+  .onboarding-content,
+  .today-primary,
+  .today-side,
+  .plan-overview,
+  .plan-meals,
+  .calendar-layout,
+  .progress-summary,
+  .progress-content,
+  .settings-content,
+  .profile-page,
+  .profile-grid,
+  .meal-list,
+  .history-list,
+  .day-meal-list,
+  .snack-food-results,
+  .food-results,
+  .meal-destinations,
+  .meal-preview-grid,
+  .benefit-grid,
+  .shopping-links,
+  .range-grid,
+  .metric-grid,
+  .step-list,
+  .option-grid,
+  .principles ul,
+  .legal-page
+) {
+  > * {
+    --stack-order: 0;
+    animation: surface-rise var(--motion-enter) var(--ease-emphasized) backwards;
+    animation-delay: calc(35ms + var(--stack-order) * 42ms);
+  }
+
+  > :nth-child(2) { --stack-order: 1; }
+  > :nth-child(3) { --stack-order: 2; }
+  > :nth-child(4) { --stack-order: 3; }
+  > :nth-child(5) { --stack-order: 4; }
+  > :nth-child(6) { --stack-order: 5; }
+  > :nth-child(7) { --stack-order: 6; }
+  > :nth-child(n + 8) { --stack-order: 7; }
+}
+
+.progress-track span {
+  transform-origin: left center;
+  animation: progress-sweep 760ms 180ms var(--ease-emphasized) backwards;
+}
+
+.sparkline i {
+  transform-origin: center bottom;
+  animation: spark-rise 520ms var(--ease-emphasized) backwards;
+}
+
+.sparkline i:nth-child(2) { animation-delay: 45ms; }
+.sparkline i:nth-child(3) { animation-delay: 90ms; }
+.sparkline i:nth-child(4) { animation-delay: 135ms; }
+.sparkline i:nth-child(5) { animation-delay: 180ms; }
+.sparkline i:nth-child(6) { animation-delay: 225ms; }
+.sparkline i:nth-child(7) { animation-delay: 270ms; }
+.sparkline i:nth-child(8) { animation-delay: 315ms; }
+
+.status-ring {
+  animation: ring-settle 640ms 120ms var(--ease-emphasized) backwards;
+}
+
+details[open] > :not(summary) {
+  animation: disclosure-reveal 260ms var(--ease-out) backwards;
+}
+
+summary {
+  border-radius: 8px;
+  cursor: pointer;
+  transform-origin: left center;
+  transition:
+    background-color var(--motion-base) ease,
+    color var(--motion-base) ease,
+    box-shadow var(--motion-base) ease,
+    transform var(--motion-fast) var(--ease-out);
+}
+
+.option-card,
+.category-badge:has(input),
+.food-actions button,
+.selected-food button {
+  transform-origin: center;
+  transition:
+    background-color var(--motion-base) ease,
+    border-color var(--motion-base) ease,
+    box-shadow var(--motion-base) ease,
+    color var(--motion-base) ease,
+    opacity var(--motion-fast) ease,
+    transform var(--motion-fast) var(--ease-out);
+}
+
+:is(
+  .auth-switch,
+  .form-row,
+  .checkbox-row,
+  .landing-footer,
+  .legal-page,
+  .message-box
+) a:not(.brand):not(.button):not(.text-link) {
+  display: inline-block;
+  border-radius: 5px;
+  transform-origin: center;
+  transition:
+    background-color var(--motion-fast) ease,
+    box-shadow var(--motion-fast) ease,
+    color var(--motion-fast) ease,
+    transform var(--motion-fast) var(--ease-out);
+}
+
+:is(
+  .brand,
+  .button,
+  .ui-button,
+  .icon-button,
+  .text-link,
+  .nav-link,
+  .profile-chip,
+  .mobile-profile-link,
+  .check-button,
+  .day-tab,
+  .calendar-day,
+  .shopping-links a,
+  .settings-index a,
+  .food-actions button,
+  .selected-food button,
+  summary
+) {
+  transform-origin: center;
+}
+
+:is(
+  .auth-switch,
+  .form-row,
+  .checkbox-row,
+  .landing-footer,
+  .legal-page,
+  .message-box
+) a:not(.brand):not(.button):not(.text-link) {
+  transform-origin: center;
+}
+
+.settings-index a,
+summary {
+  transform-origin: left center;
+}
+
+.option-card:has(input:focus-visible),
+.category-badge:has(input:focus-visible) {
+  outline: 3px solid #2f7d4e;
+  outline-offset: 3px;
+}
+
+button:disabled,
+[aria-disabled="true"],
+.option-card:has(input:disabled),
+.category-badge:has(input:disabled) {
+  cursor: not-allowed;
+}
+
+.icon-button:disabled,
+.text-link:disabled,
+.food-actions button:disabled,
+.selected-food button:disabled,
+.option-card:has(input:disabled),
+.category-badge:has(input:disabled) {
+  opacity: 0.55;
+  transform: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .brand:hover {
+    transform: translateY(-1px) scale(1.008);
+  }
+
+  .button:hover:not(:disabled),
+  .ui-button:hover:not(:disabled) {
+    transform: translateY(-2px) scale(1.018);
+  }
+
+  .icon-button:hover:not(:disabled),
+  .mobile-profile-link:hover,
+  .selected-food button:hover:not(:disabled) {
+    transform: scale(1.06);
+  }
+
+  .text-link:hover:not(:disabled) {
+    border-radius: 999px;
+    background: rgba(184, 227, 109, 0.16);
+    transform: translateY(-1px) scale(1.015);
+  }
+
+  .nav-link:hover {
+    transform: translateX(3px) scale(1.01);
+  }
+
+  .profile-chip:hover,
+  .shopping-links a:hover {
+    transform: translateY(-2px) scale(1.008);
+  }
+
+  .check-button:hover:not(:disabled),
+  .day-tab:hover:not(:disabled) {
+    transform: translateY(-1px) scale(1.015);
+  }
+
+  .calendar-day:hover:not(:disabled) {
+    transform: scale(1.012);
+  }
+
+  .settings-index a:hover {
+    transform: translateX(3px) scale(1.008);
+  }
+
+  .food-actions button:hover:not(:disabled) {
+    border-color: #8fb69a;
+    background: white;
+    box-shadow: 0 7px 18px rgba(18, 74, 44, 0.1);
+    transform: translateY(-1px) scale(1.025);
+  }
+
+  .option-card:hover:not(:has(input:disabled)) {
+    border-color: #8fb69a;
+    background: #fdfefb;
+    box-shadow: 0 9px 24px rgba(18, 74, 44, 0.09);
+    transform: translateY(-1px) scale(1.012);
+  }
+
+  .category-badge:has(input):hover:not(:has(input:disabled)) {
+    background: #e3f1df;
+    box-shadow: 0 5px 14px rgba(18, 74, 44, 0.09);
+    transform: scale(1.025);
+  }
+
+  :is(
+    .auth-switch,
+    .form-row,
+    .checkbox-row,
+    .landing-footer,
+    .legal-page,
+    .message-box
+  ) a:not(.brand):not(.button):not(.text-link):hover {
+    background: rgba(184, 227, 109, 0.16);
+    color: var(--accent-dark);
+    transform: scale(1.012);
+  }
+
+  summary:hover {
+    background: rgba(184, 227, 109, 0.15);
+    color: var(--accent-dark);
+    transform: scale(1.008);
+  }
+
+  :is(
+    .auth-switch,
+    .form-row,
+    .checkbox-row,
+    .landing-footer,
+    .legal-page,
+    .message-box
+  ) a:not(.brand):not(.button):not(.text-link):hover {
+    color: var(--accent-dark);
+    text-decoration-color: var(--accent-dark);
+    text-decoration-thickness: 2px;
+  }
+}
+
+:is(
+  .brand,
+  .button,
+  .ui-button,
+  .icon-button,
+  .text-link,
+  .nav-link,
+  .profile-chip,
+  .mobile-profile-link,
+  .check-button,
+  .day-tab,
+  .calendar-day,
+  .shopping-links a,
+  .settings-index a,
+  .food-actions button,
+  .selected-food button,
+  summary
+):active:not(:disabled):not([aria-disabled="true"]) {
+  box-shadow:
+    0 0 0 4px var(--interaction-ring),
+    0 8px 22px rgba(18, 74, 44, 0.13);
+  transform: none;
+}
+
+:is(
+  .auth-switch,
+  .form-row,
+  .checkbox-row,
+  .landing-footer,
+  .legal-page,
+  .message-box
+) a:not(.brand):not(.button):not(.text-link):active {
+  box-shadow:
+    0 0 0 4px var(--interaction-ring),
+    0 8px 22px rgba(18, 74, 44, 0.13);
+  transform: none;
+}
+
+.option-card:active:not(:has(input:disabled)),
+.category-badge:has(input):active:not(:has(input:disabled)) {
+  box-shadow: 0 0 0 4px var(--interaction-ring);
+  transform: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  :is(
+    .brand,
+    .button,
+    .ui-button,
+    .icon-button,
+    .text-link,
+    .nav-link,
+    .profile-chip,
+    .mobile-profile-link,
+    .check-button,
+    .day-tab,
+    .calendar-day,
+    .shopping-links a,
+    .settings-index a,
+    .food-actions button,
+    .selected-food button,
+    summary
+  ):active:not(:disabled):not([aria-disabled="true"]) {
+    transform: scale(1.025);
+  }
+
+  :is(
+    .auth-switch,
+    .form-row,
+    .checkbox-row,
+    .landing-footer,
+    .legal-page,
+    .message-box
+  ) a:not(.brand):not(.button):not(.text-link):active {
+    transform: scale(1.025);
+  }
+
+  .option-card:active:not(:has(input:disabled)),
+  .category-badge:has(input):active:not(:has(input:disabled)) {
+    transform: scale(1.02);
+  }
+}
+
 @media (max-width: 1050px) {
   .hero {
     grid-template-columns: 1fr;
@@ -2907,6 +3358,15 @@ details.message-box[open] > summary {
 
   .auth-card h1 {
     font-size: 2.5rem;
+  }
+
+  .registration-demographics {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .registration-demographics > .field {
+    width: 100%;
   }
 
   .app-shell {
@@ -3268,18 +3728,41 @@ details.message-box[open] > summary {
   }
 }
 
-@media (hover: none) {
-  .button:hover,
+@media (hover: none), (pointer: coarse) {
+  .brand:hover,
+  .button:hover:not(:active),
+  .ui-button:hover:not(:active),
+  .icon-button:hover:not(:active),
+  .text-link:hover:not(:active),
   .brand:hover .brand-mark,
-  .nav-link:hover,
-  .profile-chip:hover,
+  .nav-link:hover:not(:active),
+  .profile-chip:hover:not(:active),
+  .mobile-profile-link:hover:not(:active),
   .meal-row:hover,
   .metric:hover,
-  .day-tab:hover,
+  .check-button:hover:not(:active),
+  .day-tab:hover:not(:active),
+  .calendar-day:hover:not(:active),
   .plan-meal-card:hover,
   .summary-stat:hover,
-  .shopping-links a:hover,
-  .settings-index a:hover {
+  .shopping-links a:hover:not(:active),
+  .settings-index a:hover:not(:active),
+  .food-actions button:hover:not(:active),
+  .selected-food button:hover:not(:active),
+  .option-card:hover:not(:active),
+  .category-badge:has(input):hover:not(:active),
+  summary:hover:not(:active) {
+    transform: none;
+  }
+
+  :is(
+    .auth-switch,
+    .form-row,
+    .checkbox-row,
+    .landing-footer,
+    .legal-page,
+    .message-box
+  ) a:not(.brand):not(.button):not(.text-link):hover:not(:active) {
     transform: none;
   }
 }
@@ -3294,6 +3777,48 @@ details.message-box[open] > summary {
     animation-delay: 0ms !important;
     transition-duration: 0.01ms !important;
     transition-delay: 0ms !important;
+  }
+
+  :is(
+    .brand,
+    .button,
+    .ui-button,
+    .icon-button,
+    .text-link,
+    .nav-link,
+    .profile-chip,
+    .mobile-profile-link,
+    .check-button,
+    .day-tab,
+    .calendar-day,
+    .shopping-links a,
+    .settings-index a,
+    .food-actions button,
+    .selected-food button,
+    .option-card,
+    .category-badge:has(input),
+    summary
+  ):is(:hover, :active) {
+    transform: none !important;
+  }
+
+  :is(
+    .auth-switch,
+    .form-row,
+    .checkbox-row,
+    .landing-footer,
+    .legal-page,
+    .message-box
+  ) a:not(.brand):not(.button):not(.text-link):is(:hover, :active) {
+    transform: none !important;
+  }
+
+  .brand:hover .brand-mark,
+  .meal-row:hover,
+  .metric:hover,
+  .plan-meal-card:hover,
+  .summary-stat:hover {
+    transform: none !important;
   }
 }
 

@@ -259,6 +259,7 @@ export function FoodSearchPicker({
               </p>
             </div>
             <button
+              className="button button-quiet"
               type="button"
               disabled={externalPending}
               onClick={() =>

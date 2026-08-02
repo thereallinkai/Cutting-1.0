@@ -18,6 +18,7 @@ import {
   PRODUCT_TOUR_REPLAY_HASH,
   PRODUCT_TOUR_REPLAY_REQUEST_KEY,
 } from "@/src/lib/product-tour";
+import { parseLocalDate } from "@/src/lib/domain/dates";
 
 type ProfileViewData = {
   mode: "authenticated" | "demo";
@@ -27,6 +28,7 @@ type ProfileViewData = {
   };
   profile: {
     fullName: string;
+    dateOfBirth: string | null;
     age: number | null;
     gender:
       | "male"
@@ -129,6 +131,21 @@ function displayDate(value: string | null) {
   }).format(date);
 }
 
+function displayDateOfBirth(value: string | null) {
+  if (!value) return "Not provided";
+  try {
+    const { year, month, day } = parseLocalDate(value);
+    return new Intl.DateTimeFormat("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      timeZone: "UTC",
+    }).format(new Date(Date.UTC(year, month - 1, day)));
+  } catch {
+    return "Not available";
+  }
+}
+
 function displayWeight(
   weightKg: number | null,
   unit: ProfileViewData["profile"]["preferredWeightUnit"],
@@ -198,13 +215,17 @@ export function ProfileView({ data }: { data: ProfileViewData }) {
           <div className="card-title">
             <div>
               <h2 id="personal-heading">Personal details</h2>
-              <p>Information stored with your account</p>
+              <p>Account information. Confirmed date of birth is read-only.</p>
             </div>
             <UserRound size={20} aria-hidden="true" />
           </div>
           <dl className="profile-detail-list">
             <div>
-              <dt>Age</dt>
+              <dt>Date of birth</dt>
+              <dd>{displayDateOfBirth(profile.dateOfBirth)}</dd>
+            </div>
+            <div>
+              <dt>Current age</dt>
               <dd>{profile.age ?? "Not provided"}</dd>
             </div>
             <div>
