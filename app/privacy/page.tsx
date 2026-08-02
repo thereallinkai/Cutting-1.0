@@ -12,7 +12,7 @@ export default function PrivacyPage() {
         <BrandLink />
         <Link className="text-link" href="/register">Back to signup</Link>
       </header>
-      <p className="eyebrow">Version 1.1 · July 28, 2026</p>
+      <p className="eyebrow">Version 1.2 · August 2, 2026</p>
       <h1>Privacy Notice</h1>
       <p>
         This notice explains the data {BRAND.name} needs for account access, meal
@@ -21,11 +21,22 @@ export default function PrivacyPage() {
       </p>
       <h2>Information you provide</h2>
       <p>
-        Account details, preferences, goals, optional safety context, meal
-        check-ins, weight entries, user-entered food-label facts, and optional
-        label photos are stored with your account. Label photos are kept in
-        private storage and are not shown to other users. Passwords are handled
-        by Supabase Auth and are never stored in {BRAND.name} business tables.
+        Account details, including your date of birth, preferences, goals,
+        optional safety context, meal check-ins, weight entries, user-entered
+        food-label facts, and optional label photos are stored with your
+        account. Your confirmed date of birth is used to derive your current
+        age and cannot be edited through the app after account creation. Label
+        photos are kept in private storage and are not shown to other users.
+        Passwords are handled by Supabase Auth and are never stored in{" "}
+        {BRAND.name} business tables.
+      </p>
+      <p>
+        Before account creation, the current browser tab may keep a temporary
+        registration draft containing your name, gender, date of birth, and
+        email so a refresh does not erase the form. Passwords and Terms or
+        Privacy acceptance selections are not put in that draft. The draft is
+        removed after successful registration and normally ends with the tab
+        session.
       </p>
       <h2>Food sources and reusable product facts</h2>
       <p>
@@ -41,8 +52,9 @@ export default function PrivacyPage() {
       <p>
         The app computes conversions, summaries, ranges, and trends. When you
         explicitly generate a plan, a minimized profile snapshot may be sent to
-        the configured AI provider. The review screen shows what will be shared.
-        Hidden model reasoning is not stored.
+        the configured AI provider. That snapshot can include the app-derived
+        age, but not the raw date of birth. The review screen shows what will be
+        shared. Hidden model reasoning is not stored.
       </p>
       <h2>Development mode</h2>
       <p>
@@ -62,9 +74,11 @@ export default function PrivacyPage() {
       <h2>Location and external maps</h2>
       <p>
         Device time-zone detection uses browser-provided time-zone settings and
-        does not require precise location permission. Nearby-shopping shortcuts
-        open Google Maps in a new tab. {BRAND.name} does not receive the location
-        or search results from that external page and does not verify inventory.
+        does not require precise location permission. The detected time zone is
+        used to keep date-of-birth validation and current-age calculations on
+        the same local calendar date. Nearby-shopping shortcuts open Google Maps
+        in a new tab. {BRAND.name} does not receive the location or search
+        results from that external page and does not verify inventory.
       </p>
     </main>
   );

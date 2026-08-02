@@ -1,5 +1,6 @@
 export * from "./ai-plan";
 export * from "./completion";
+export * from "./date-of-birth";
 export * from "./dates";
 export * from "./estimates";
 export * from "./food-catalog";

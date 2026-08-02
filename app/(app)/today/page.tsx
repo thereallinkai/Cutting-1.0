@@ -15,6 +15,7 @@ import {
   localDateInTimeZone,
   normalizeMealSlotCheckins,
   remainingDays,
+  resolveProfileAge,
   resolvePlanDay,
   type MealCheckinStatus,
   type MealSlot,
@@ -47,7 +48,7 @@ export default async function TodayPage() {
       supabase
         .from("profiles")
         .select(
-          "full_name,time_zone,age,height_cm,gender,activity_level,safety_context",
+          "full_name,time_zone,age,date_of_birth,height_cm,gender,activity_level,safety_context",
         )
         .eq("user_id", auth.user.id)
         .single(),
@@ -169,12 +170,15 @@ export default async function TodayPage() {
     very_active: "very_active",
     extremely_active: "very_active",
   } as const;
+  const profileAge = profile
+    ? resolveProfileAge(profile.date_of_birth, profile.age, today)
+    : null;
   const estimate =
     goal && profile
       ? calculateNutritionEstimate({
           weightKg: latestWeight,
           heightCm: profile.height_cm,
-          ageYears: profile.age,
+          ageYears: profileAge,
           sexForEstimate:
             profile.gender === "male" || profile.gender === "female"
               ? profile.gender

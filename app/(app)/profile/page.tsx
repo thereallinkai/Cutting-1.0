@@ -6,6 +6,10 @@ import {
   type ProfileViewData,
 } from "@/components/profile-view";
 import { isDevelopmentDemo } from "@/src/lib/env";
+import {
+  localDateInTimeZone,
+  resolveProfileAge,
+} from "@/src/lib/domain";
 import { createSupabaseServerClient } from "@/src/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Profile" };
@@ -29,6 +33,7 @@ const demoProfile: ProfileViewData = {
   },
   profile: {
     fullName: "Jamie Rivera",
+    dateOfBirth: "1995-04-12",
     age: 31,
     gender: "prefer_not_to_say",
     heightCm: 172,
@@ -58,7 +63,24 @@ const demoProfile: ProfileViewData = {
 };
 
 export default async function ProfilePage() {
-  if (isDevelopmentDemo()) return <ProfileView data={demoProfile} />;
+  if (isDevelopmentDemo()) {
+    const dateOfBirth = demoProfile.profile.dateOfBirth;
+    const currentAge = dateOfBirth
+      ? resolveProfileAge(
+          dateOfBirth,
+          demoProfile.profile.age,
+          localDateInTimeZone(new Date(), demoProfile.profile.timeZone),
+        )
+      : demoProfile.profile.age;
+    return (
+      <ProfileView
+        data={{
+          ...demoProfile,
+          profile: { ...demoProfile.profile, age: currentAge },
+        }}
+      />
+    );
+  }
 
   const supabase = await createSupabaseServerClient();
   const { data: auth, error: authError } = await supabase.auth.getUser();
@@ -69,7 +91,7 @@ export default async function ProfilePage() {
       supabase
         .from("profiles")
         .select(
-          "full_name,age,gender,height_cm,preferred_weight_unit,time_zone,activity_level,training_days_per_week,allergies,dietary_restrictions,disliked_foods,safety_context,onboarding_completed_at",
+          "full_name,age,date_of_birth,gender,height_cm,preferred_weight_unit,time_zone,activity_level,training_days_per_week,allergies,dietary_restrictions,disliked_foods,safety_context,onboarding_completed_at",
         )
         .eq("user_id", auth.user.id)
         .maybeSingle(),
@@ -108,6 +130,18 @@ export default async function ProfilePage() {
 
   const profile = profileResult.data;
   const goal = goalResult.data;
+  let profileAge = profile?.age ?? null;
+  if (profile?.date_of_birth) {
+    try {
+      profileAge = resolveProfileAge(
+        profile.date_of_birth,
+        profile.age,
+        localDateInTimeZone(new Date(), profile.time_zone),
+      );
+    } catch {
+      return profileLoadError();
+    }
+  }
   const data: ProfileViewData = {
     mode: "authenticated",
     account: {
@@ -118,7 +152,8 @@ export default async function ProfilePage() {
       fullName:
         profile?.full_name ??
         String(auth.user.user_metadata.full_name ?? "Member"),
-      age: profile?.age ?? null,
+      dateOfBirth: profile?.date_of_birth ?? null,
+      age: profileAge,
       gender: profile?.gender ?? null,
       heightCm: profile?.height_cm ?? null,
       preferredWeightUnit: profile?.preferred_weight_unit ?? "kg",

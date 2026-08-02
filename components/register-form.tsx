@@ -1,14 +1,25 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
+import * as Dialog from "@radix-ui/react-dialog";
 import { AlertCircle, LoaderCircle } from "lucide-react";
+import {
+  calculateAgeOnDate,
+  MAXIMUM_REGISTRATION_AGE,
+  MINIMUM_REGISTRATION_AGE,
+  isValidIanaTimeZone,
+  localDateInTimeZone,
+  parseLocalDate,
+  registrationDateOfBirthBounds,
+  validateRegistrationDateOfBirth,
+} from "@/src/lib/domain";
 import { PasswordField } from "./password-field";
 
 type RegistrationField =
   | "fullName"
   | "gender"
-  | "age"
+  | "dateOfBirth"
   | "email"
   | "password"
   | "passwordConfirmation"
@@ -19,77 +30,234 @@ type RegistrationErrors = Partial<Record<RegistrationField, string>>;
 
 const REGISTRATION_DRAFT_KEY = "lets-go-green-registration-draft";
 const LEGACY_REGISTRATION_DRAFT_KEY = "cutting-plan-registration-draft";
+const REGISTRATION_DRAFT_VERSION = 2;
+
+type AgeConfirmation = {
+  dateOfBirth: string;
+  age: number;
+  referenceDate: string;
+  timeZone: string;
+  requiresReconfirmation: boolean;
+};
+
+type SafeRegistrationDraft = {
+  version: typeof REGISTRATION_DRAFT_VERSION;
+  fullName: string;
+  gender: string;
+  dateOfBirth: string;
+  email: string;
+};
+
+function browserStorage(kind: "localStorage" | "sessionStorage") {
+  try {
+    return window[kind];
+  } catch {
+    return null;
+  }
+}
+
+function readStorage(storage: Storage | null, key: string) {
+  try {
+    return storage?.getItem(key) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function removeStorage(storage: Storage | null, key: string) {
+  try {
+    storage?.removeItem(key);
+  } catch {
+    // Registration still works when browser storage is unavailable.
+  }
+}
+
+function writeStorage(storage: Storage | null, key: string, value: string) {
+  try {
+    storage?.setItem(key, value);
+  } catch {
+    // Registration still works when browser storage is unavailable.
+  }
+}
+
+function safeDraftFromJson(raw: string | null): SafeRegistrationDraft | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return null;
+    }
+    const draft = parsed as Record<string, unknown>;
+    const text = (name: string, maximumLength: number) =>
+      typeof draft[name] === "string"
+        ? draft[name].slice(0, maximumLength)
+        : "";
+    const gender = text("gender", 32);
+    return {
+      version: REGISTRATION_DRAFT_VERSION,
+      fullName: text("fullName", 120),
+      gender: [
+        "male",
+        "female",
+        "another_identity",
+        "prefer_not_to_say",
+      ].includes(gender)
+        ? gender
+        : "",
+      dateOfBirth: text("dateOfBirth", 10),
+      email: text("email", 320),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function resolveDeviceTimeZone() {
+  try {
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return timeZone && isValidIanaTimeZone(timeZone) ? timeZone : "UTC";
+  } catch {
+    return "UTC";
+  }
+}
+
+function subscribeToDeviceTimeZone() {
+  return () => {};
+}
+
+function serverTimeZone() {
+  return "UTC";
+}
+
+function dateOfBirthError(dateOfBirth: string, referenceDate: string) {
+  const validation = validateRegistrationDateOfBirth(
+    dateOfBirth,
+    referenceDate,
+  );
+  if (validation.valid) return null;
+
+  let unboundedAge: number | null = null;
+  try {
+    unboundedAge = calculateAgeOnDate(dateOfBirth, referenceDate);
+  } catch {
+    // The shared validator remains the source of truth for malformed dates.
+  }
+
+  if (!dateOfBirth) return "Enter your date of birth.";
+  if (dateOfBirth > referenceDate) {
+    return "Date of birth cannot be in the future.";
+  }
+  if (unboundedAge !== null && unboundedAge < MINIMUM_REGISTRATION_AGE) {
+    return "You must be at least 13 years old to create an account.";
+  }
+  if (unboundedAge !== null && unboundedAge > MAXIMUM_REGISTRATION_AGE) {
+    return "Enter a date of birth that gives an age from 13 to 120.";
+  }
+  return "Enter a valid date of birth.";
+}
+
+function readableDate(dateOfBirth: string) {
+  const { year, month, day } = parseLocalDate(dateOfBirth);
+  return new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(year, month - 1, day)));
+}
 
 export function RegisterForm() {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
   const errorSummaryRef = useRef<HTMLDivElement>(null);
+  const createAccountButtonRef = useRef<HTMLButtonElement>(null);
+  const cancelConfirmationRef = useRef<HTMLButtonElement>(null);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<RegistrationErrors>({});
   const [pending, setPending] = useState(false);
+  const [ageConfirmation, setAgeConfirmation] =
+    useState<AgeConfirmation | null>(null);
+  const timeZone = useSyncExternalStore(
+    subscribeToDeviceTimeZone,
+    resolveDeviceTimeZone,
+    serverTimeZone,
+  );
+
+  const referenceDate = localDateInTimeZone(new Date(), timeZone);
+  const dateOfBirthBounds = registrationDateOfBirthBounds(referenceDate);
 
   useEffect(() => {
-    const current = window.localStorage.getItem(REGISTRATION_DRAFT_KEY);
-    const legacy = window.localStorage.getItem(LEGACY_REGISTRATION_DRAFT_KEY);
-    const raw = current ?? legacy;
-    if (!raw || !formRef.current) return;
-    try {
-      const draft = JSON.parse(raw) as Record<string, string | boolean>;
-      if (!current && legacy) {
-        window.localStorage.setItem(REGISTRATION_DRAFT_KEY, legacy);
-        window.localStorage.removeItem(LEGACY_REGISTRATION_DRAFT_KEY);
+    const session = browserStorage("sessionStorage");
+    const local = browserStorage("localStorage");
+    const draft =
+      safeDraftFromJson(readStorage(session, REGISTRATION_DRAFT_KEY)) ??
+      safeDraftFromJson(readStorage(local, REGISTRATION_DRAFT_KEY)) ??
+      safeDraftFromJson(readStorage(local, LEGACY_REGISTRATION_DRAFT_KEY));
+
+    removeStorage(local, REGISTRATION_DRAFT_KEY);
+    removeStorage(local, LEGACY_REGISTRATION_DRAFT_KEY);
+
+    if (!draft) {
+      removeStorage(session, REGISTRATION_DRAFT_KEY);
+      return;
+    }
+    writeStorage(session, REGISTRATION_DRAFT_KEY, JSON.stringify(draft));
+
+    const formElement = formRef.current;
+    if (!formElement) return;
+    for (const name of ["fullName", "gender", "dateOfBirth", "email"] as const) {
+      const control = formElement.elements.namedItem(name);
+      if (
+        control instanceof HTMLInputElement ||
+        control instanceof HTMLSelectElement
+      ) {
+        control.value = draft[name];
       }
-      for (const name of ["fullName", "gender", "age", "email"]) {
-        const control = formRef.current.elements.namedItem(name);
-        if (
-          (control instanceof HTMLInputElement ||
-            control instanceof HTMLSelectElement) &&
-          typeof draft[name] === "string"
-        ) {
-          control.value = String(draft[name]);
-        }
-      }
-      for (const name of ["terms", "privacy"]) {
-        const control = formRef.current.elements.namedItem(name);
-        if (
-          control instanceof HTMLInputElement &&
-          typeof draft[name] === "boolean"
-        ) {
-          control.checked = Boolean(draft[name]);
-        }
-      }
-    } catch {
-      window.localStorage.removeItem(REGISTRATION_DRAFT_KEY);
-      window.localStorage.removeItem(LEGACY_REGISTRATION_DRAFT_KEY);
     }
   }, []);
 
   function saveSafeDraft(formElement: HTMLFormElement) {
     const form = new FormData(formElement);
-    window.localStorage.setItem(
+    writeStorage(
+      browserStorage("sessionStorage"),
       REGISTRATION_DRAFT_KEY,
       JSON.stringify({
+        version: REGISTRATION_DRAFT_VERSION,
         fullName: form.get("fullName") ?? "",
         gender: form.get("gender") ?? "",
-        age: form.get("age") ?? "",
+        dateOfBirth: form.get("dateOfBirth") ?? "",
         email: form.get("email") ?? "",
-        terms: form.get("terms") === "on",
-        privacy: form.get("privacy") === "on",
       }),
     );
   }
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (pending || ageConfirmation) return;
+
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     const password = String(form.get("password") ?? "");
-    const confirmation = String(form.get("passwordConfirmation") ?? "");
+    const passwordConfirmation = String(
+      form.get("passwordConfirmation") ?? "",
+    );
     setError("");
     const validationErrors: RegistrationErrors = {};
     const fullName = String(form.get("fullName") ?? "").trim();
     const gender = String(form.get("gender") ?? "");
-    const age = Number(form.get("age"));
+    const dateOfBirthValue = String(form.get("dateOfBirth") ?? "");
+    const confirmationTimeZone = resolveDeviceTimeZone();
+    const confirmationReferenceDate = localDateInTimeZone(
+      new Date(),
+      confirmationTimeZone,
+    );
+    const dateOfBirthValidation = validateRegistrationDateOfBirth(
+      dateOfBirthValue,
+      confirmationReferenceDate,
+    );
+    const age = dateOfBirthValidation.valid
+      ? dateOfBirthValidation.age
+      : null;
     const email = String(form.get("email") ?? "").trim();
 
     if (fullName.length < 2) {
@@ -102,18 +270,22 @@ export function RegisterForm() {
     ) {
       validationErrors.gender = "Choose a gender option.";
     }
-    if (!Number.isInteger(age) || age < 13 || age > 120) {
-      validationErrors.age = "Age must be a whole number from 13 to 120.";
+    if (!dateOfBirthValidation.valid) {
+      validationErrors.dateOfBirth = dateOfBirthError(
+        dateOfBirthValue,
+        confirmationReferenceDate,
+      )!;
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       validationErrors.email = "Enter a valid email address.";
     }
     if (password.length < 10) {
-      validationErrors.password = "Use at least 10 characters for your password.";
+      validationErrors.password =
+        "Use at least 10 characters for your password.";
     }
-    if (!confirmation) {
+    if (!passwordConfirmation) {
       validationErrors.passwordConfirmation = "Confirm your password.";
-    } else if (password !== confirmation) {
+    } else if (password !== passwordConfirmation) {
       validationErrors.passwordConfirmation = "The passwords do not match.";
     }
     if (form.get("terms") !== "on") {
@@ -138,17 +310,69 @@ export function RegisterForm() {
     }
 
     setFieldErrors({});
+    setAgeConfirmation({
+      dateOfBirth: dateOfBirthValue,
+      age: age!,
+      referenceDate: confirmationReferenceDate,
+      timeZone: confirmationTimeZone,
+      requiresReconfirmation: false,
+    });
+  }
+
+  async function createAccount() {
+    if (!ageConfirmation || pending) return;
+    const currentTimeZone = resolveDeviceTimeZone();
+    const currentReferenceDate = localDateInTimeZone(
+      new Date(),
+      currentTimeZone,
+    );
+    const currentDateOfBirth = validateRegistrationDateOfBirth(
+      ageConfirmation.dateOfBirth,
+      currentReferenceDate,
+    );
+    if (!currentDateOfBirth.valid) {
+      setAgeConfirmation(null);
+      setError("");
+      setFieldErrors({
+        dateOfBirth:
+          dateOfBirthError(
+            ageConfirmation.dateOfBirth,
+            currentReferenceDate,
+          ) ?? "Enter a valid date of birth.",
+      });
+      window.requestAnimationFrame(() => errorSummaryRef.current?.focus());
+      return;
+    }
+    if (
+      currentReferenceDate !== ageConfirmation.referenceDate ||
+      currentTimeZone !== ageConfirmation.timeZone
+    ) {
+      setAgeConfirmation({
+        dateOfBirth: ageConfirmation.dateOfBirth,
+        age: currentDateOfBirth.age,
+        referenceDate: currentReferenceDate,
+        timeZone: currentTimeZone,
+        requiresReconfirmation: true,
+      });
+      return;
+    }
+
+    const formElement = formRef.current;
+    if (!formElement) return;
+    const form = new FormData(formElement);
+
     setPending(true);
     try {
       const response = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          fullName: form.get("fullName"),
+          fullName: String(form.get("fullName") ?? "").trim(),
           gender: form.get("gender"),
-          age: Number(form.get("age")),
-          email: form.get("email"),
-          password,
+          dateOfBirth: ageConfirmation.dateOfBirth,
+          timeZone: ageConfirmation.timeZone,
+          email: String(form.get("email") ?? "").trim(),
+          password: String(form.get("password") ?? ""),
           termsAccepted: form.get("terms") === "on",
           privacyAccepted: form.get("privacy") === "on",
         }),
@@ -158,16 +382,29 @@ export function RegisterForm() {
         error: { message: string } | null;
       };
       if (!response.ok || result.error) {
+        setAgeConfirmation(null);
         setError(
           result.error?.message ??
             "We could not create the account. Review the form and try again.",
         );
+        window.requestAnimationFrame(() => errorSummaryRef.current?.focus());
         return;
       }
-      const email = result.data?.email ?? String(form.get("email"));
+      removeStorage(
+        browserStorage("sessionStorage"),
+        REGISTRATION_DRAFT_KEY,
+      );
+      removeStorage(browserStorage("localStorage"), REGISTRATION_DRAFT_KEY);
+      removeStorage(
+        browserStorage("localStorage"),
+        LEGACY_REGISTRATION_DRAFT_KEY,
+      );
+      const email = result.data?.email ?? String(form.get("email") ?? "");
       router.push(`/onboarding?step=2&email=${encodeURIComponent(email)}`);
     } catch {
+      setAgeConfirmation(null);
       setError("The service is temporarily unavailable. Please try again.");
+      window.requestAnimationFrame(() => errorSummaryRef.current?.focus());
     } finally {
       setPending(false);
     }
@@ -238,7 +475,7 @@ export function RegisterForm() {
           </p>
         ) : null}
       </div>
-      <div className="form-row">
+      <div className="form-row registration-demographics">
         <div className="field" style={{ flex: 1 }}>
           <label htmlFor="gender">Gender</label>
           <select
@@ -261,21 +498,26 @@ export function RegisterForm() {
             </p>
           ) : null}
         </div>
-        <div className="field" style={{ width: 110 }}>
-          <label htmlFor="age">Age</label>
+        <div className="field" style={{ flex: 1 }}>
+          <label htmlFor="date-of-birth">Date of birth</label>
           <input
-            id="age"
-            name="age"
-            type="number"
-            min="13"
-            max="120"
-            aria-describedby={fieldErrors.age ? "age-error" : undefined}
-            aria-invalid={Boolean(fieldErrors.age) || undefined}
+            id="date-of-birth"
+            name="dateOfBirth"
+            type="date"
+            min={dateOfBirthBounds.min}
+            max={dateOfBirthBounds.max}
+            autoComplete="bday"
+            aria-describedby={`date-of-birth-help${fieldErrors.dateOfBirth ? " date-of-birth-error" : ""}`}
+            aria-invalid={Boolean(fieldErrors.dateOfBirth) || undefined}
             required
           />
-          {fieldErrors.age ? (
-            <p className="field-error" id="age-error">
-              {fieldErrors.age}
+          <p className="field-help" id="date-of-birth-help">
+            You will confirm this before account creation. It cannot be changed
+            afterward.
+          </p>
+          {fieldErrors.dateOfBirth ? (
+            <p className="field-error" id="date-of-birth-error">
+              {fieldErrors.dateOfBirth}
             </p>
           ) : null}
         </div>
@@ -364,10 +606,98 @@ export function RegisterForm() {
           {fieldErrors.privacy}
         </p>
       ) : null}
-      <button className="button button-dark form-submit" disabled={pending} type="submit">
-        {pending ? <LoaderCircle className="spin" size={18} aria-hidden="true" /> : null}
-        {pending ? "Creating account…" : "Create account"}
+      <button
+        aria-haspopup="dialog"
+        className="button button-dark form-submit"
+        disabled={pending}
+        ref={createAccountButtonRef}
+        type="submit"
+      >
+        Create account
       </button>
+
+      <Dialog.Root
+        open={ageConfirmation !== null}
+        onOpenChange={(open) => {
+          if (!open && !pending) setAgeConfirmation(null);
+        }}
+      >
+        <Dialog.Portal>
+          <Dialog.Overlay className="dialog-overlay" />
+          <Dialog.Content
+            className="dialog-content"
+            onEscapeKeyDown={(event) => {
+              if (pending) event.preventDefault();
+            }}
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              createAccountButtonRef.current?.focus();
+            }}
+            onOpenAutoFocus={(event) => {
+              event.preventDefault();
+              cancelConfirmationRef.current?.focus();
+            }}
+            onPointerDownOutside={(event) => {
+              if (pending) event.preventDefault();
+            }}
+          >
+            <Dialog.Title>Confirm your age</Dialog.Title>
+            <Dialog.Description>
+              Make sure your date of birth is correct. It cannot be changed after
+              your account is created.
+            </Dialog.Description>
+            {ageConfirmation ? (
+              <div className="message-box" style={{ marginTop: "1rem" }}>
+                <div>
+                  <strong>{ageConfirmation.age} years old</strong>
+                  <p style={{ margin: ".25rem 0 0" }}>
+                    Born {readableDate(ageConfirmation.dateOfBirth)}
+                  </p>
+                  <p style={{ margin: ".25rem 0 0" }}>
+                    Calculated in {ageConfirmation.timeZone}
+                  </p>
+                </div>
+              </div>
+            ) : null}
+            {ageConfirmation?.requiresReconfirmation ? (
+              <div className="message-box" role="status">
+                Your local date or time zone changed. Review the updated age,
+                then confirm again.
+              </div>
+            ) : null}
+            <div
+              className="header-actions"
+              style={{ justifyContent: "flex-end", marginTop: "1rem" }}
+            >
+              <Dialog.Close asChild>
+                <button
+                  className="button button-quiet"
+                  disabled={pending}
+                  ref={cancelConfirmationRef}
+                  type="button"
+                >
+                  Cancel and edit
+                </button>
+              </Dialog.Close>
+              <button
+                className="button button-dark"
+                disabled={pending}
+                onClick={() => void createAccount()}
+                type="button"
+              >
+                {pending ? (
+                  <LoaderCircle className="spin" size={18} aria-hidden="true" />
+                ) : null}
+                {pending
+                  ? "Creating account…"
+                  : ageConfirmation?.requiresReconfirmation
+                    ? "Confirm updated age"
+                    : "Confirm and create account"}
+              </button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </form>
   );
 }

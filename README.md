@@ -8,8 +8,8 @@ The repository is a single full-stack TypeScript application built with Next.js 
 
 > **Wellness and safety:** Let's Go Green! provides general wellness information and is not medical advice. Individual needs can vary. Consult a qualified healthcare professional or registered dietitian when appropriate.
 
-The current testing build is **Let's Go Green! 1.0 Beta 1**
-(`1.0.0-beta.1`). See [VERSIONING.md](VERSIONING.md) for the release-number
+The current testing build is **Let's Go Green! 1.0 Beta 2**
+(`1.0.0-beta.2`). See [VERSIONING.md](VERSIONING.md) for the release-number
 policy and [CHANGELOG.md](CHANGELOG.md) for user-visible changes.
 
 ## Current feature set
@@ -17,6 +17,10 @@ policy and [CHANGELOG.md](CHANGELOG.md) for user-visible changes.
 The repository is structured to provide:
 
 - Public landing, login, registration, password-recovery, Terms, and Privacy experiences.
+- Date-of-birth registration with deterministic age validation, an explicit
+  final age confirmation, immutable confirmed birth dates, and current-age
+  derivation on the automatically detected device time zone for safety
+  calculations.
 - Authenticated Today, My Plan, Calendar, Progress, Profile, and Settings experiences on desktop and mobile.
 - Resumable onboarding for profile, food preferences, goals, lifestyle, safety context, and review.
 - A searchable food catalog that distinguishes generic foods from exact brand, product, variant, and GTIN/barcode records.
@@ -26,7 +30,9 @@ The repository is structured to provide:
 - Versioned seven-day plans with an accepted-plan boundary.
 - Six ordered daily spaces—breakfast, morning snack, lunch, afternoon snack, dinner, and evening snack—with extra-food recording and an explicit skipped state whose reason is optional.
 - A profile reached from the account avatar, automatic device-time-zone initialization without a location permission prompt, a replayable first-run tutorial, and clearly external nearby-shopping links.
-- A green responsive visual system with page/dialog transitions that respect reduced-motion preferences.
+- A green responsive visual system with coordinated page, section, surface,
+  stack, dialog, and interaction feedback that respects reduced-motion
+  preferences.
 - Local-date weight entries, progress summaries, and rolling trends.
 - Deterministic unit, date, progress, completion, nutrition, filtering, and safety calculations.
 - Local Supabase Auth, PostgreSQL, Row Level Security, migrations, deterministic seed data, Studio, and captured email.
@@ -195,7 +201,7 @@ Exact-product lookup runs on the server. Add these values to the ignored `.env.l
 USDA_FDC_API_KEY=
 
 # Descriptive application identity sent to food-data providers.
-FOOD_LOOKUP_USER_AGENT=LetsGoGreen/1.0.0-beta.1 (https://github.com/thereallinkai/Lets-Go-Green)
+FOOD_LOOKUP_USER_AGENT=LetsGoGreen/1.0.0-beta.2 (https://github.com/thereallinkai/Lets-Go-Green)
 ```
 
 - `USDA_FDC_API_KEY` is optional for local development because non-production mode can use the USDA `DEMO_KEY`. That shared key is rate-limited and is not a production configuration. Obtain and secure a data.gov key before relying on USDA lookup in a deployed environment.
@@ -324,9 +330,20 @@ npm run verify
 Current automated coverage includes:
 
 - Unit coverage of conversions, dates, time zones, progress direction, missing data, trends, six-slot meal normalization, meal guidance, nutrition basis, filtering, safety, plan mapping, schema validation, and idempotency.
-- Component coverage of authentication controls; onboarding draft restoration, validation, food selection, warning acknowledgement, reordering, and removal; plan version review and restore; progress ranges and deletion confirmation; Today and Calendar snack/skip behavior; profile and tutorial controls; weight persistence rollback; and optimistic-save rollback.
-- Real local database coverage of schema and seed invariants, constraints, catalog and pending-record visibility, private ownership, cross-user RLS denial, snack and skipped-meal persistence, and atomic application RPCs.
-- Playwright coverage of public and legal navigation, protected mock pages, Today persistence, mock-plan generation and acceptance, mobile primary navigation, horizontal overflow at 375/768/1280/1440 pixels, and axe scans.
+- Component coverage of authentication controls and DOB confirmation; safe
+  session-draft restoration without passwords or legal acceptance; onboarding
+  validation, food selection, warning acknowledgement, reordering, and removal;
+  plan version review and restore; progress ranges and deletion confirmation;
+  Today and Calendar snack/skip behavior; profile and tutorial controls; weight
+  persistence rollback; and optimistic-save rollback.
+- Real local database coverage of schema and seed invariants, immutable DOB and
+  legacy-account boundaries, constraints, catalog and pending-record visibility,
+  private ownership, cross-user RLS denial, snack and skipped-meal persistence,
+  and atomic application RPCs.
+- Playwright coverage of public and legal navigation, registration age
+  confirmation, protected mock pages, Today persistence, mock-plan generation
+  and acceptance, motion/reduced-motion behavior, mobile primary navigation,
+  horizontal overflow at 375/768/1280/1440 pixels, and axe scans.
 
 Authentication email, OTP, the complete external-provider and photo-upload workflows, full onboarding, two-user browser isolation, keyboard-only critical flow, and production-provider behavior still require the hands-on checks in `MANUAL_TESTING.md`. Do not treat a narrower mock-backed browser suite as evidence that those flows or any production integration have passed.
 

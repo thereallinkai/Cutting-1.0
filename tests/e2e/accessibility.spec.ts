@@ -143,6 +143,81 @@ test("reduced-motion preference removes nonessential page and control motion", a
   expect(motion.scrollBehavior).toBe("auto");
 });
 
+test("fine-pointer controls grow and highlight without changing layout", async ({
+  page,
+}) => {
+  await page.goto("/login");
+  const button = page.getByRole("button", { name: "Log in" });
+  const initialLayout = await button.evaluate((element) => ({
+    width: element.clientWidth,
+    height: element.clientHeight,
+  }));
+
+  await button.hover();
+  await page.waitForTimeout(220);
+  const hoverScale = await button.evaluate((element) => {
+    const transform = getComputedStyle(element).transform;
+    return transform === "none" ? 1 : new DOMMatrixReadOnly(transform).a;
+  });
+
+  await page.mouse.down();
+  await page.waitForTimeout(180);
+  const pressed = await button.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      scale: style.transform === "none"
+        ? 1
+        : new DOMMatrixReadOnly(style.transform).a,
+      boxShadow: style.boxShadow,
+    };
+  });
+  const pressedLayout = await button.evaluate((element) => ({
+    width: element.clientWidth,
+    height: element.clientHeight,
+  }));
+  await page.mouse.up();
+
+  expect(hoverScale).toBeGreaterThan(1.01);
+  expect(pressed.scale).toBeGreaterThan(hoverScale);
+  expect(pressed.boxShadow).not.toBe("none");
+  expect(pressedLayout).toEqual(initialLayout);
+
+  await page.goto("/");
+  const sharedButton = page
+    .getByRole("main")
+    .getByRole("link", { name: "Create account" })
+    .first();
+  await sharedButton.hover();
+  await page.waitForTimeout(220);
+  await page.mouse.down();
+  await page.waitForTimeout(180);
+  const sharedPressedScale = await sharedButton.evaluate((element) => {
+    const transform = getComputedStyle(element).transform;
+    return transform === "none" ? 1 : new DOMMatrixReadOnly(transform).a;
+  });
+  await page.mouse.up();
+
+  expect(sharedPressedScale).toBeGreaterThan(1.02);
+  expect(sharedPressedScale).toBeLessThan(1.04);
+});
+
+test("static information cards do not advertise a click action on hover", async ({
+  page,
+}) => {
+  await page.goto("/today");
+  const mealRow = page.locator(".meal-row").first();
+  await page.waitForTimeout(550);
+  await mealRow.hover({ position: { x: 4, y: 4 } });
+  await page.waitForTimeout(220);
+
+  const state = await mealRow.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { cursor: style.cursor, transform: style.transform };
+  });
+  expect(state.cursor).not.toBe("pointer");
+  expect(state.transform).toBe("none");
+});
+
 test("tutorial actions remain reachable in a short mobile viewport", async ({
   page,
 }) => {

@@ -156,6 +156,7 @@ insert into public.profiles (
   full_name,
   gender,
   age,
+  date_of_birth,
   time_zone,
   onboarding_status
 )
@@ -164,6 +165,7 @@ values (
   'RPC User',
   'prefer_not_to_say',
   30,
+  (current_date - interval '30 years')::date,
   'UTC',
   'in_progress'
 );
